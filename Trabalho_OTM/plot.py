@@ -7,7 +7,6 @@ import matplotlib.patheffects as path_effects
 import numpy as np
 import os
 
-# Removida a variável global fixa para permitir nomes dinâmicos
 def plot_pizza_por_ativos(serie_pesos, risco, retorno, valor_investido, nome_arquivo, titulo_personalizado):
     print(f"Gerando gráfico: {titulo_personalizado}")
     
@@ -22,7 +21,7 @@ def plot_pizza_por_ativos(serie_pesos, risco, retorno, valor_investido, nome_arq
     labels = list(final_series.index)
     sizes = list(final_series.values)
 
-    fig, ax = plt.subplots(figsize=(10, 8)) # Tamanho levemente ajustado
+    fig, ax = plt.subplots(figsize=(10, 8))
     cmap = plt.get_cmap("nipy_spectral")
     colors = cmap(np.linspace(0.05, 0.95, len(labels)))
 
@@ -43,7 +42,6 @@ def plot_pizza_por_ativos(serie_pesos, risco, retorno, valor_investido, nome_arq
     
     ax.axis('equal')
 
-    # Legenda Top 20
     num_legend = min(20, len(labels))
     plt.legend(
         wedges[:num_legend], labels[:num_legend],
@@ -60,20 +58,19 @@ def plot_pizza_por_ativos(serie_pesos, risco, retorno, valor_investido, nome_arq
     )
     
     plt.tight_layout()
-    plt.savefig(nome_arquivo, dpi=150) # DPI ajustado para web
+    plt.savefig(nome_arquivo, dpi=150)
     print(f"Gráfico salvo em: '{nome_arquivo}'")
-    plt.close(fig) # Importante para liberar memória
+    plt.close(fig)
 
-def rodar_visualizacao_dupla(inputs, res_ga, res_gurobi, caminho_img_ga, caminho_img_gurobi):
-    """
-    Gera dois gráficos comparativos.
-    """
+# --- ALTERAÇÃO: Função agora aceita 3 resultados ---
+def rodar_visualizacao_tripla(inputs, res_ga, res_gurobi_warm, res_gurobi_cold, 
+                              path_ga, path_gu_warm, path_gu_cold):
+    
     valor_total = inputs['valor_total_investido']
     nomes_ativos = inputs['nomes_dos_ativos']
 
-    # --- PLOT 1: ALGORITMO GENÉTICO ---
+    # 1. GA
     if res_ga:
-        # O GA já retorna um DataFrame pronto, pegamos a primeira linha
         row_ga = res_ga['dataframe_resultado'].iloc[0]
         cols_meta = ['Risco_Alvo', 'Risco_Encontrado_Anual', 'Retorno_Encontrado_Anual']
         pesos_ga = row_ga.drop(cols_meta, errors='ignore')
@@ -83,20 +80,30 @@ def rodar_visualizacao_dupla(inputs, res_ga, res_gurobi, caminho_img_ga, caminho
             risco=row_ga['Risco_Encontrado_Anual'],
             retorno=row_ga['Retorno_Encontrado_Anual'],
             valor_investido=valor_total,
-            nome_arquivo=caminho_img_ga,
+            nome_arquivo=path_ga,
             titulo_personalizado="Algoritmo Genético (Aproximação)"
         )
 
-    # --- PLOT 2: GUROBI ---
-    if res_gurobi:
-        # O Gurobi retorna um dict com 'pesos' em numpy array. Precisamos converter para Series.
-        pesos_gurobi_series = pd.Series(res_gurobi['pesos'], index=nomes_ativos)
-        
+    # 2. GUROBI COM GA (Warm Start)
+    if res_gurobi_warm:
+        pesos_warm = pd.Series(res_gurobi_warm['pesos'], index=nomes_ativos)
         plot_pizza_por_ativos(
-            serie_pesos=pesos_gurobi_series,
-            risco=res_gurobi['risco'],
-            retorno=res_gurobi['retorno'],
+            serie_pesos=pesos_warm,
+            risco=res_gurobi_warm['risco'],
+            retorno=res_gurobi_warm['retorno'],
             valor_investido=valor_total,
-            nome_arquivo=caminho_img_gurobi,
-            titulo_personalizado="Solver Exato (Gurobi)"
+            nome_arquivo=path_gu_warm,
+            titulo_personalizado="Gurobi (Com ajuda do GA)"
+        )
+
+    # 3. GUROBI PURO (Cold Start)
+    if res_gurobi_cold:
+        pesos_cold = pd.Series(res_gurobi_cold['pesos'], index=nomes_ativos)
+        plot_pizza_por_ativos(
+            serie_pesos=pesos_cold,
+            risco=res_gurobi_cold['risco'],
+            retorno=res_gurobi_cold['retorno'],
+            valor_investido=valor_total,
+            nome_arquivo=path_gu_cold,
+            titulo_personalizado="Gurobi Puro (Sem GA)"
         )

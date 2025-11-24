@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Otimizador de Portfólio (Comparativo)</title>
+    <title>Otimizador de Portfólio (Comparativo Triplo)</title>
     <style>
         :root {
             --bg-light: #e8f5e9;
@@ -13,7 +13,8 @@
             --secondary-color: #1a521c;
             --accent-color: #2e7d32;
             --text-dark: #1c3329;
-            --gurobi-color: #0056b3; /* Azul para diferenciar Gurobi */
+            --gurobi-warm-color: #0056b3; /* Azul */
+            --gurobi-cold-color: #6a1b9a; /* Roxo */
         }
 
         body {
@@ -37,64 +38,52 @@
         .step.active { display: block; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
-        /* Estilos de Formulário */
+        /* Formulário */
         .form-group { margin-bottom: 20px; }
         label { display: block; margin-bottom: 8px; font-weight: bold; color: var(--subtitle-color); }
-        input[type="number"], select {
-            width: 100%; padding: 12px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 16px;
-            box-sizing: border-box;
-        }
-        .btn {
-            width: 100%; padding: 15px; background-color: var(--secondary-color); color: white;
-            border: none; border-radius: 8px; font-size: 18px; font-weight: bold; cursor: pointer;
-            transition: 0.3s;
-        }
+        input[type="number"], select { width: 100%; padding: 12px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 16px; box-sizing: border-box; }
+        .btn { width: 100%; padding: 15px; background-color: var(--secondary-color); color: white; border: none; border-radius: 8px; font-size: 18px; font-weight: bold; cursor: pointer; transition: 0.3s; }
         .btn:hover { background-color: var(--primary-color); }
         .btn-outline { background-color: transparent; border: 2px solid var(--secondary-color); color: var(--secondary-color); margin-top: 10px; }
 
         .sector-options { display: none; margin-top: 20px; border: 1px solid #eee; padding: 15px; border-radius: 8px; max-height: 300px; overflow-y: auto; }
         .sector-item { display: flex; align-items: center; padding: 10px; border-bottom: 1px solid #f0f0f0; }
         
-        /* --- ESTILOS DAS ABAS (TABS) --- */
-        .tabs-container {
-            display: flex; justify-content: center; margin-bottom: 20px; border-bottom: 2px solid #eee;
-        }
-        .tab-btn {
-            padding: 12px 25px; border: none; background: none; font-size: 16px; font-weight: bold;
-            color: #666; cursor: pointer; border-bottom: 4px solid transparent; transition: 0.3s;
-        }
+        /* --- ABAS (TABS) --- */
+        .tabs-container { display: flex; justify-content: center; margin-bottom: 20px; border-bottom: 2px solid #eee; }
+        .tab-btn { padding: 12px 15px; border: none; background: none; font-size: 15px; font-weight: bold; color: #666; cursor: pointer; border-bottom: 4px solid transparent; transition: 0.3s; }
         .tab-btn:hover { background-color: #f9f9f9; }
+        
         .tab-btn.active { color: var(--secondary-color); border-bottom-color: var(--secondary-color); }
-        .tab-btn.active-gurobi { color: var(--gurobi-color); border-bottom-color: var(--gurobi-color); }
+        .tab-btn.active-gu-warm { color: var(--gurobi-warm-color); border-bottom-color: var(--gurobi-warm-color); }
+        .tab-btn.active-gu-cold { color: var(--gurobi-cold-color); border-bottom-color: var(--gurobi-cold-color); }
         
         .tab-content { display: none; animation: fadeIn 0.3s; }
         .tab-content.active { display: block; }
 
         /* --- RESULTADOS --- */
-        .metrics-summary {
-            display: flex; justify-content: space-between; /* Espalha os 4 itens */
-            margin-bottom: 20px;
-            background: var(--primary-color); color: white; padding: 15px; border-radius: 8px;
-        }
-        .metrics-summary.gurobi-theme { background: var(--gurobi-color); }
+        .metrics-summary { display: flex; justify-content: space-between; margin-bottom: 20px; background: var(--primary-color); color: white; padding: 15px; border-radius: 8px; }
+        .metrics-summary.gu-warm-theme { background: var(--gurobi-warm-color); }
+        .metrics-summary.gu-cold-theme { background: var(--gurobi-cold-color); }
         
         .metric { text-align: center; flex: 1; border-right: 1px solid rgba(255,255,255,0.2); }
         .metric:last-child { border-right: none; }
-        
-        .metric-value { font-size: 22px; font-weight: bold; }
-        .metric-label { font-size: 13px; opacity: 0.9; margin-top: 4px; }
+        .metric-value { font-size: 18px; font-weight: bold; }
+        .metric-label { font-size: 12px; opacity: 0.9; margin-top: 4px; }
 
         .results-grid { display: flex; flex-direction: column; gap: 30px; }
         .result-base-card { background: #f8fdf9; padding: 20px; border-radius: 10px; border: 1px solid #e0e0e0; }
         .plot-placeholder img { width: 100%; height: auto; border-radius: 8px; }
 
-        /* Tabela */
         .table-card { height: 500px; display: flex; flex-direction: column; }
         .table-scroll-area { flex-grow: 1; overflow-y: auto; }
         table { width: 100%; border-collapse: separate; border-spacing: 0; }
         th, td { text-align: left; padding: 12px; border-bottom: 1px solid #ddd; }
+        
+        /* Cores de Cabeçalho de Tabela */
         th { position: sticky; top: 0; background-color: var(--subtitle-color); color: white; }
-        .gurobi-table th { background-color: var(--gurobi-color); }
+        .gu-warm-table th { background-color: var(--gurobi-warm-color); }
+        .gu-cold-table th { background-color: var(--gurobi-cold-color); }
 
         /* Loading */
         .loading-container { text-align: center; padding: 50px 0; }
@@ -108,7 +97,7 @@
 
     <div id="step1" class="step active">
         <h1>Otimizador de Portfólio</h1>
-        <p style="text-align: center; color: #666;">Comparativo: Algoritmo Genético vs. Solver Exato</p>
+        <p style="text-align: center; color: #666;">Comparativo: GA vs. Gurobi (Warm Start) vs. Gurobi (Cold Start)</p>
         
         <div class="form-group">
             <label>Valor Total (R$)</label>
@@ -145,16 +134,17 @@
         <div class="loading-container">
             <div class="spinner"></div>
             <h2>Otimizando...</h2>
-            <p>Calculando fronteira eficiente com GA e refinando com Gurobi.</p>
+            <p>Executando GA, Gurobi com GA e Gurobi Puro...</p>
         </div>
     </div>
 
     <div id="results" class="step">
-        <h2>Resultados da Otimização</h2>
+        <h2>Resultados</h2>
         
         <div class="tabs-container">
-            <button class="tab-btn active" onclick="switchTab('ga')" id="btnTabGA">🧬 Algoritmo Genético</button>
-            <button class="tab-btn" onclick="switchTab('gurobi')" id="btnTabGU">📐 Gurobi (Exato)</button>
+            <button class="tab-btn active" onclick="switchTab('ga')" id="btnTabGA">🧬 AG (Aproximado)</button>
+            <button class="tab-btn" onclick="switchTab('gu_warm')" id="btnTabGUWarm">📐 Gurobi (Com AG)</button>
+            <button class="tab-btn" onclick="switchTab('gu_cold')" id="btnTabGUCold">🤖 Gurobi (Sem AG)</button>
         </div>
 
         <div id="content-ga" class="tab-content active">
@@ -162,42 +152,46 @@
                 <div class="metric"><div class="metric-value" id="val_GA">R$ 0</div><div class="metric-label">Investido</div></div>
                 <div class="metric"><div class="metric-value" id="ret_GA">0%</div><div class="metric-label">Retorno</div></div>
                 <div class="metric"><div class="metric-value" id="ris_GA">0%</div><div class="metric-label">Risco</div></div>
-                <div class="metric"><div class="metric-value" id="obj_GA">0.0000</div><div class="metric-label">Função Objetivo</div></div>
+                <div class="metric"><div class="metric-value" id="obj_GA">0.0000</div><div class="metric-label">Objetivo</div></div>
+                <div class="metric"><div class="metric-value" id="time_GA">0.00s</div><div class="metric-label">Tempo (s)</div></div>
             </div>
             <div class="results-grid">
-                <div class="result-base-card chart-card">
-                    <div class="plot-placeholder" id="plot_GA"></div>
-                </div>
-                <div class="result-base-card table-card">
-                    <div class="table-scroll-area">
-                        <table id="table_GA">
-                            <thead><tr><th>Ativo</th><th>Peso</th><th>Valor</th></tr></thead>
-                            <tbody></tbody>
-                        </table>
-                    </div>
-                </div>
+                <div class="result-base-card chart-card"><div class="plot-placeholder" id="plot_GA"></div></div>
+                <div class="result-base-card table-card"><div class="table-scroll-area">
+                    <table id="table_GA"><thead><tr><th>Ativo</th><th>Peso</th><th>Valor</th></tr></thead><tbody></tbody></table>
+                </div></div>
             </div>
         </div>
 
-        <div id="content-gurobi" class="tab-content">
-            <div class="metrics-summary gurobi-theme">
-                <div class="metric"><div class="metric-value" id="val_GU">R$ 0</div><div class="metric-label">Investido</div></div>
-                <div class="metric"><div class="metric-value" id="ret_GU">0%</div><div class="metric-label">Retorno (Ótimo)</div></div>
-                <div class="metric"><div class="metric-value" id="ris_GU">0%</div><div class="metric-label">Risco</div></div>
-                <div class="metric"><div class="metric-value" id="obj_GU">0.0000</div><div class="metric-label">Função Objetivo</div></div>
+        <div id="content-gu_warm" class="tab-content">
+            <div class="metrics-summary gu-warm-theme">
+                <div class="metric"><div class="metric-value" id="val_GU_WARM">R$ 0</div><div class="metric-label">Investido</div></div>
+                <div class="metric"><div class="metric-value" id="ret_GU_WARM">0%</div><div class="metric-label">Retorno</div></div>
+                <div class="metric"><div class="metric-value" id="ris_GU_WARM">0%</div><div class="metric-label">Risco</div></div>
+                <div class="metric"><div class="metric-value" id="obj_GU_WARM">0.0000</div><div class="metric-label">Objetivo</div></div>
+                <div class="metric"><div class="metric-value" id="time_GU_WARM">0.00s</div><div class="metric-label">Tempo (s)</div></div>
             </div>
             <div class="results-grid">
-                <div class="result-base-card chart-card">
-                    <div class="plot-placeholder" id="plot_GU"></div>
-                </div>
-                <div class="result-base-card table-card">
-                    <div class="table-scroll-area">
-                        <table id="table_GU" class="gurobi-table">
-                            <thead><tr><th>Ativo</th><th>Peso</th><th>Valor</th></tr></thead>
-                            <tbody></tbody>
-                        </table>
-                    </div>
-                </div>
+                <div class="result-base-card chart-card"><div class="plot-placeholder" id="plot_GU_WARM"></div></div>
+                <div class="result-base-card table-card"><div class="table-scroll-area">
+                    <table id="table_GU_WARM" class="gu-warm-table"><thead><tr><th>Ativo</th><th>Peso</th><th>Valor</th></tr></thead><tbody></tbody></table>
+                </div></div>
+            </div>
+        </div>
+
+        <div id="content-gu_cold" class="tab-content">
+            <div class="metrics-summary gu-cold-theme">
+                <div class="metric"><div class="metric-value" id="val_GU_COLD">R$ 0</div><div class="metric-label">Investido</div></div>
+                <div class="metric"><div class="metric-value" id="ret_GU_COLD">0%</div><div class="metric-label">Retorno</div></div>
+                <div class="metric"><div class="metric-value" id="ris_GU_COLD">0%</div><div class="metric-label">Risco</div></div>
+                <div class="metric"><div class="metric-value" id="obj_GU_COLD">0.0000</div><div class="metric-label">Objetivo</div></div>
+                <div class="metric"><div class="metric-value" id="time_GU_COLD">0.00s</div><div class="metric-label">Tempo (s)</div></div>
+            </div>
+            <div class="results-grid">
+                <div class="result-base-card chart-card"><div class="plot-placeholder" id="plot_GU_COLD"></div></div>
+                <div class="result-base-card table-card"><div class="table-scroll-area">
+                    <table id="table_GU_COLD" class="gu-cold-table"><thead><tr><th>Ativo</th><th>Peso</th><th>Valor</th></tr></thead><tbody></tbody></table>
+                </div></div>
             </div>
         </div>
 
@@ -215,28 +209,26 @@
     function goToStep2() { showStep('step2'); }
     function toggleSectorList(show) { document.getElementById('sectorList').style.display = show ? 'block' : 'none'; }
 
-    // --- LÓGICA DAS ABAS ---
     function switchTab(tabName) {
         document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
         document.querySelectorAll('.tab-btn').forEach(el => {
             el.classList.remove('active');
-            el.classList.remove('active-gurobi');
+            el.classList.remove('active-gu-warm');
+            el.classList.remove('active-gu-cold');
         });
 
         document.getElementById('content-' + tabName).classList.add('active');
         
-        const btn = document.getElementById(tabName === 'ga' ? 'btnTabGA' : 'btnTabGU');
-        if (tabName === 'gurobi') {
-            btn.classList.add('active-gurobi');
-        } else {
-            btn.classList.add('active');
-        }
+        const btn = document.getElementById('btnTab' + tabName.toUpperCase().replace('_', ''));
+        
+        if (tabName === 'gu_warm') btn.classList.add('active-gu-warm');
+        else if (tabName === 'gu_cold') btn.classList.add('active-gu-cold');
+        else btn.classList.add('active');
     }
 
     async function startOptimization() {
         const modoSetor = document.querySelector('input[name="sectorMode"]:checked').value;
         let proibidos = [];
-        
         if (modoSetor === 'custom') {
             document.querySelectorAll('#sectorList input[type="checkbox"]').forEach(cb => {
                 if (!cb.checked) proibidos.push(cb.value);
@@ -257,7 +249,6 @@
                 })
             });
             const data = await response.json();
-            
             if (!data.sucesso) throw new Error(data.erro);
 
             renderizarTudo(data);
@@ -270,47 +261,38 @@
     }
 
     function renderizarTudo(data) {
-        // 1. Renderizar GA
         fillData('GA', data.ga);
-
-        // 2. Renderizar Gurobi (se existir)
-        if (data.gurobi) {
-            document.getElementById('btnTabGU').style.display = 'inline-block';
-            fillData('GU', data.gurobi);
-        } else {
-            document.getElementById('btnTabGU').style.display = 'none';
-        }
         
-        // Volta para a aba GA por padrão
+        if (data.gurobi_warm) {
+            document.getElementById('btnTabGUWarm').style.display = 'inline-block';
+            fillData('GU_WARM', data.gurobi_warm);
+        } else document.getElementById('btnTabGUWarm').style.display = 'none';
+
+        if (data.gurobi_cold) {
+            document.getElementById('btnTabGUCold').style.display = 'inline-block';
+            fillData('GU_COLD', data.gurobi_cold);
+        } else document.getElementById('btnTabGUCold').style.display = 'none';
+        
         switchTab('ga');
     }
 
     function fillData(suffix, obj) {
-        // Preenche Métricas
-        document.getElementById(`val_${suffix}`).innerText = 
-            Number(obj.metricas.valor_investido).toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'});
-        
+        document.getElementById(`val_${suffix}`).innerText = Number(obj.metricas.valor_investido).toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'});
         document.getElementById(`ret_${suffix}`).innerText = obj.metricas.retorno_aa.toFixed(2) + '%';
         document.getElementById(`ris_${suffix}`).innerText = obj.metricas.risco_aa.toFixed(2) + '%';
-
-        // --- NOVO: Preenche Função Objetivo ---
-        if (obj.metricas.score) {
-            document.getElementById(`obj_${suffix}`).innerText = obj.metricas.score.toFixed(5);
+        if (obj.metricas.score) document.getElementById(`obj_${suffix}`).innerText = obj.metricas.score.toFixed(5);
+        
+        // --- NOVO: Preenche Tempo ---
+        if (obj.metricas.tempo !== undefined) {
+            document.getElementById(`time_${suffix}`).innerText = obj.metricas.tempo.toFixed(4) + 's';
         }
 
-        // Preenche Imagem
         document.getElementById(`plot_${suffix}`).innerHTML = `<img src="${obj.grafico_url}" alt="Gráfico ${suffix}">`;
 
-        // Preenche Tabela
         const tbody = document.querySelector(`#table_${suffix} tbody`);
         tbody.innerHTML = '';
         obj.alocacao.forEach(item => {
-            tbody.innerHTML += `
-                <tr>
-                    <td style="font-weight:bold">${item.ativo}</td>
-                    <td>${item.peso.toFixed(2)}%</td>
-                    <td>${item.valor.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'})}</td>
-                </tr>`;
+            tbody.innerHTML += `<tr><td style="font-weight:bold">${item.ativo}</td><td>${item.peso.toFixed(2)}%</td><td>${item.valor.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'})}</td></tr>`;
         });
     }
 </script>

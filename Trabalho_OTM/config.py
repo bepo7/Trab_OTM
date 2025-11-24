@@ -10,16 +10,16 @@ ANOS_DE_DADOS = 5
 # --- 2. PARÂMETROS DE OTIMIZAÇÃO ---
 LAMBDA_AVERSAO_RISCO_PADRAO = 2.0 
 
-# --- 3. UNIVERSO TOTAL DE ATIVOS ---
+# --- 3. UNIVERSO TOTAL DE ATIVOS (NOMES HUMANIZADOS) ---
 UNIVERSO_ATIVOS = {
     
-    "SETOR_ENERGIA_PETROLEO": [
+    "Energia e Petróleo": [
         'PETR3.SA', 'PETR4.SA', 'PRIO3.SA', 'UGPA3.SA', 'CSAN3.SA', 'VBBR3.SA', 
         'BRAV3.SA', 'RECV3.SA', 'EXXO34.SA', 'CHVX34.SA', 'B1PP34.SA', 'OXYP34.SA', 
         'SLBG34.SA', 'HALI34.SA', 'RRRP3.SA', 'ENAT3.SA', 'RAIZ4.SA'
     ],
 
-    "SETOR_UTILIDADES_ELETRICA_SANEAMENTO": [
+    "Utilidades, Elétrica e Saneamento": [
         'ELET3.SA', 'ELET6.SA', 'EGIE3.SA', 'CPFE3.SA', 'CMIG4.SA', 'EQTL3.SA', 
         'TAEE11.SA', 'ALUP11.SA', 'ISAE4.SA', 'CPLE6.SA', 'NEOE3.SA', 'ENGI11.SA', 
         'AURE3.SA', 'SBSP3.SA', 'CSMG3.SA', 'SAPR11.SA', 'ENEV3.SA', 'CMIG3.SA', 
@@ -27,7 +27,7 @@ UNIVERSO_ATIVOS = {
         'MEGA3.SA'
     ],
 
-    "SETOR_FINANCEIRO_SEGUROS": [
+    "Financeiro e Seguros": [
         'ITUB4.SA', 'BBDC4.SA', 'BBAS3.SA', 'SANB11.SA', 'BPAC11.SA', 'B3SA3.SA', 
         'ITSA4.SA', 'CXSE3.SA', 'BBSE3.SA', 'ABCB4.SA', 'BPAN4.SA', 'BRSR6.SA', 
         'PSSA3.SA', 'IRBR3.SA', 'JPMC34.SA', 'BOAC34.SA', 'CTGP34.SA', 'WFCO34.SA', 
@@ -35,7 +35,7 @@ UNIVERSO_ATIVOS = {
         'ROXO34.SA', 'XPBR31.SA', 'BERK34.SA', 'BMGB4.SA', 'PAGS34.SA', 'CIEL3.SA'
         ],
 
-    "SETOR_TECNOLOGIA_MIDIA": [
+    "Tecnologia e Mídia": [
         'TOTS3.SA', 'LWSA3.SA', 'INTB3.SA', 'MLAS3.SA', 'AAPL34.SA', 'MSFT34.SA', 
         'GOGL34.SA', 'M1TA34.SA', 'NVDC34.SA', 'A1MD34.SA', 'ITLC34.SA', 'QCOM34.SA', 
         'AVGO34.SA', 'TSLA34.SA', 'IBMB34.SA', 'ORCL34.SA', 'SSFO34.SA', 'ADBE34.SA', 
@@ -43,7 +43,7 @@ UNIVERSO_ATIVOS = {
         'TXSA34.SA', 'CASH3.SA', 'FIQE3.SA', 'EL1V34.SA'
     ],
 
-    "SETOR_VAREJO_CONSUMO": [
+    "Varejo e Consumo": [
         'MGLU3.SA', 'BHIA3.SA', 'LREN3.SA', 'AZZA3.SA', 'ALOS3.SA', 'ASAI3.SA', 
         'GMAT3.SA', 'PETZ3.SA', 'RADL3.SA', 'RAIL3.SA', 'VIVA3.SA', 'ZAMP3.SA', 
         'ABEV3.SA', 'MDIA3.SA', 'CAML3.SA', 'SMTO3.SA', 'BEEF3.SA', 'MRFG3.SA', 
@@ -52,13 +52,13 @@ UNIVERSO_ATIVOS = {
         'JNJB34.SA', 'ARZZ3.SA', 'SOMA3.SA', 'GUAR3.SA', 'CEAB3.SA' 
     ],
 
-    "SETOR_SAUDE_FARMACEUTICA": [
+    "Saúde e Farmacêutica": [
         'HAPV3.SA', 'RDOR3.SA', 'FLRY3.SA', 'QUAL3.SA', 'ODPV3.SA', 'VVEO3.SA',
         'PFIZ34.SA', 'MRCK34.SA', 'ABBV34.SA', 'LILY34.SA', 'UNHH34.SA', 'BMYB34.SA',
         'M1RN34.SA', 'GILD34.SA', 'A1ZN34.SA', 'PNVL3.SA', 'MATD3.SA'
     ],
 
-    "SETOR_MATERIAIS_INDUSTRIAL": [
+    "Materiais Básicos e Industrial": [
         'VALE3.SA', 'GGBR4.SA', 'GOAU4.SA', 'CSNA3.SA', 'USIM5.SA', 'SUZB3.SA', 
         'KLBN11.SA', 'BRAP4.SA', 'CMIN3.SA', 'DXCO3.SA', 'FESA4.SA', 'UNIP6.SA',
         'WEGE3.SA', 'EMBR3.SA', 'POMO4.SA', 'RAPT4.SA', 'TASA4.SA', 'RIOT34.SA', 
@@ -67,33 +67,33 @@ UNIVERSO_ATIVOS = {
         'RANI3.SA', 'SHUL4.SA'
     ],
 
-    "SETOR_IMOBILIARIO_CONSTRUCAO": [
+    "Imobiliário e Construção": [
         'CYRE3.SA', 'EZTC3.SA', 'MRVE3.SA', 'DIRR3.SA', 'TEND3.SA', 'JHSF3.SA',
         'GFSA3.SA', 'HBOR3.SA', 'CURY3.SA', 'PLPL3.SA', 'IGTI11.SA', 'MULT3.SA', 
         'ALOS3.SA', 'LOGG3.SA', 'A1MT34.SA', 'P1LD34.SA', 'C1CI34.SA', 'R1IN34.SA', 
         'E1QR34.SA', 'SIMN34.SA', 'LAVV3.SA', 'EVEN3.SA', 'MELK3.SA'   
     ],
 
-    "MERCADO_EUROPEU_ASIATICO": [
+    "Mercado Europeu e Asiático": [
         'XINA11.SA', 'ASIA11.SA', 'SAPP34.SA', 'ASML34.SA', 'H1SB34.SA', 'BABA34.SA', 
         'TSMC34.SA', 'SNEC34.SA', 'TMCO34.SA', 'BIDU34.SA', 'JDCO34.SA'
     ],
 
-    "CRIPTOATIVOS": [
+    "Criptoativos": [
         'BTC-USD', 'ETH-USD', 'BNB-USD', 'SOL-USD', 'XRP-USD', 'ADA-USD', 'DOGE-USD', 
         'AVAX-USD', 'LINK-USD', 'DOT-USD', 'MATIC-USD', 'LTC-USD', 'BCH-USD', 
         'UNI7083-USD', 'AAVE-USD', 'ATOM-USD', 'XLM-USD', 'TRX-USD', 'ETC-USD',
         'SHIB-USD', 'ALGO-USD', 'NEAR-USD'
     ],
 
-    "ETFS_INDICES_GLOBAIS": [
+    "ETFS e Índices Globais": [
         'IVVB11.SA', 'SPXI11.SA', 'NASD11.SA', 'BOVA11.SA', 'SMAL11.SA', 'BRAX11.SA',
         'ECOO11.SA', 'GOVE11.SA', 'MATB11.SA', 'FIND11.SA', 'DIVO11.SA', 'PIBB11.SA',
         'GOLD11.SA', 'HASH11.SA', 'QBTC11.SA', 'QETH11.SA', 'TECK11.SA', 'DNAI11.SA',
         'EURP11.SA', 'XINA11.SA'
     ],
 
-    "FIIS_BRASIL": [
+    "FIIs (Fundos Imobiliários)": [
         'KNCR11.SA', 'KNIP11.SA', 'HGCR11.SA', 'MXRF11.SA', 'CPTS11.SA', 'RECR11.SA', 
         'IRDM11.SA', 'VRTA11.SA', 'CVBI11.SA', 'MCCI11.SA', 'VGIP11.SA', 'RBRR11.SA',
         'TGAR11.SA', 'DEVA11.SA', 'HCTR11.SA', 'VSLH11.SA', 'KNSC11.SA', 'RBRY11.SA',
@@ -106,7 +106,7 @@ UNIVERSO_ATIVOS = {
         'GAME11.SA', 'VGAF11.SA'
     ],
 
-    "RENDA_FIXA_ETFS": [
+    "Renda Fixa (ETFs)": [
         'B5P211.SA', 'IMAB11.SA', 'IRFM11.SA', 'LFTS11.SA', 'LTNB11.SA', 'IB5M11.SA'
     ]
 }
