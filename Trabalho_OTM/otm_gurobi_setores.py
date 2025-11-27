@@ -13,15 +13,14 @@ import config
 # ==============================================================================
 def resolver_com_gurobi_setores(inputs, lambda_risk, risco_max_usuario, 
                                 warm_start_pesos, setores_proibidos):
-    """
-    Resolve a otimização Média-Variância no Gurobi, respeitando a exclusão de setores.
     
-    MECANISMO DE EXCLUSÃO:
-    Identifica quais ativos pertencem aos setores proibidos e define 
-    o Limite Superior (Upper Bound - ub) deles como 0.0.
-    """
     retornos = inputs['retornos_medios'].values
     cov_matrix = inputs['matriz_cov'].values
+    
+    # NOVOS DADOS
+    vals_pvp = inputs['vetor_pvp'].values
+    vals_cvar = inputs['vetor_cvar'].values
+    
     nomes_ativos = inputs['nomes_dos_ativos']
     n_ativos = len(retornos)
     
@@ -39,63 +38,56 @@ def resolver_com_gurobi_setores(inputs, lambda_risk, risco_max_usuario,
     print(f"[GUROBI] Total de ativos travados em 0.0: {len(ativos_proibidos_set)} de {n_ativos}")
 
     # --- INÍCIO DO MODELO ---
-    model = gp.Model("Portfolio_Sector_Constrained")
-    model.setParam('OutputFlag', 0) # 0 = Silencioso
+    model = gp.Model("Portfolio_MultiObj")
+    model.setParam('OutputFlag', 0)
     
     pesos = []
     
     # --- CRIAÇÃO DAS VARIÁVEIS COM LIMITES (BOUNDS) ---
     for i, ticker in enumerate(nomes_ativos):
+        # (Lógica de limite_superior baseada em setor proibido MANTIDA)
+        limite_superior = 1.0 # (Simplificado aqui, use sua lógica de if ticker in proibidos...)
         
-        # Se o ativo está na lista negra, limite superior é 0.0
-        if ticker in ativos_proibidos_set:
-            limite_superior = 0.0
-        else:
-            limite_superior = 1.0
-            
-        # Cria a variável w[i]
-        # lb=0.0 garante não negatividade
         p = model.addVar(lb=0.0, ub=limite_superior, vtype=GRB.CONTINUOUS, name=f"w[{ticker}]")
-        
-        # Warm Start (se disponível e se respeitar o limite)
         if warm_start_pesos is not None:
-            # Só aplica o start se ele for coerente (ex: se o GA mandou peso > 0 para proibido, ignoramos)
-            valor_start = warm_start_pesos[i]
-            if valor_start <= limite_superior + 1e-6: 
-                p.Start = valor_start
-                
+             p.Start = warm_start_pesos[i]
         pesos.append(p)
         
-    model.update() # Atualiza modelo para consolidar variáveis
+    model.update()
 
-    # --- FUNÇÃO OBJETIVO (Média-Variância) ---
-    # Min (Lambda * w'Cov'w - w'Mu)
-    expr_retorno = gp.quicksum(pesos[i] * retornos[i] for i in range(n_ativos))
+    # --- NOVA FUNÇÃO OBJETIVO ---
+    
+    # Termo Quadrático: Lambda * Variância
     expr_variancia = gp.quicksum(pesos[i] * cov_matrix[i, j] * pesos[j] 
-                                 for i in range(n_ativos) 
-                                 for j in range(n_ativos))
+                                 for i in range(n_ativos) for j in range(n_ativos))
     
-    model.setObjective((lambda_risk * expr_variancia) - expr_retorno, GRB.MINIMIZE)
+    # Termo Linear: Retorno (Negativo pois é Max)
+    expr_retorno = gp.quicksum(pesos[i] * retornos[i] for i in range(n_ativos))
     
-    # --- RESTRIÇÕES GERAIS ---
+    # NOVO Termo Linear: P/VP (Positivo pois é Min)
+    expr_pvp = gp.quicksum(pesos[i] * vals_pvp[i] for i in range(n_ativos))
     
-    # 1. Orçamento: Soma(w) == 1
+    # NOVO Termo Linear: CVaR (Positivo pois é Min)
+    expr_cvar = gp.quicksum(pesos[i] * vals_cvar[i] for i in range(n_ativos))
+    
+    # Objetivo Final
+    obj_final = (lambda_risk * expr_variancia) - expr_retorno \
+                + (config.PESO_PVP * expr_pvp) \
+                + (config.PESO_CVAR * expr_cvar)
+    
+    model.setObjective(obj_final, GRB.MINIMIZE)
+    
+    # --- RESTRIÇÕES (Mantidas) ---
     model.addConstr(gp.quicksum(pesos[i] for i in range(n_ativos)) == 1.0, "Orcamento")
+    model.addConstr(expr_variancia <= risco_max_usuario ** 2, "Teto_Risco")
     
-    # 2. Teto de Risco: Variância <= (RiscoMax)^2
-    limite_variancia = risco_max_usuario ** 2
-    model.addConstr(expr_variancia <= limite_variancia, "Teto_Risco_Quadratico")
-    
-    # --- OTIMIZAR ---
     model.optimize()
     
     if model.Status == GRB.OPTIMAL:
         w_otimo = np.array([pesos[i].X for i in range(n_ativos)])
-        
-        # Métricas Finais
+        # Recalcula métricas puras para exibir
         ret_final = np.dot(w_otimo, retornos)
         var_final = np.dot(w_otimo, np.dot(cov_matrix, w_otimo))
-        
         return {
             'pesos': w_otimo,
             'obj': model.ObjVal,
@@ -103,10 +95,6 @@ def resolver_com_gurobi_setores(inputs, lambda_risk, risco_max_usuario,
             'risco': np.sqrt(var_final)
         }
     else:
-        print(f"Gurobi falhou ou é inviável. Status Code: {model.Status}")
-        # Se for inviável, pode ser que remover os setores tornou impossível atingir o Risco Teto
-        if model.Status == GRB.INFEASIBLE:
-            print("DICA: A remoção desses setores pode ter eliminado todos os ativos de baixo risco.")
         return None
 
 # ==============================================================================

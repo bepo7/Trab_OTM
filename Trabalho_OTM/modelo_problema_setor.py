@@ -1,89 +1,84 @@
 import numpy as np
 from pymoo.core.problem import Problem
+import config 
 
 class OtimizacaoPortfolio(Problem):
-    """
-    Modelo UNIFICADO de Otimização de Portfólio (Média-Variância).
-    
-    Funcionalidade:
-    - Minimizar (Lambda * Variância - Retorno).
-    - Suporta restrição de soma = 1.
-    - Suporta teto de risco.
-    - Suporta (Opcional) exclusão de setores via 'Box Constraints' (limite superior = 0).
-    """
-
     def __init__(self, retornos_medios, matriz_cov, 
+                 vetor_pvp, vetor_cvar, 
+                 volume_medio, valor_investido, # <--- NOVOS ARGS
                  risco_maximo_usuario, lambda_aversao_risco,
                  nomes_ativos=None, mapa_setores=None, setores_proibidos=None):
-        """
-        Inicializa o problema.
-        Se 'setores_proibidos' for fornecido, os ativos desses setores terão peso máximo travado em 0.0.
-        Caso contrário, todos podem ir até 1.0 (100%).
-        """
         
         self.retornos_medios = retornos_medios
         self.matriz_cov = matriz_cov
+        self.vetor_pvp = vetor_pvp.values     
+        self.vetor_cvar = vetor_cvar.values   
+        
         self.risco_maximo_usuario = risco_maximo_usuario
         self.lambda_aversao_risco = lambda_aversao_risco
         
         n_ativos = len(retornos_medios)
         
-        # --- 1. Definir Limites Padrão (0% a 100%) ---
-        xl = np.full(n_ativos, 0.0) # Limite Inferior (Sempre 0)
-        xu = np.full(n_ativos, 1.0) # Limite Superior (Padrão é 1.0)
-
-        # --- 2. Aplicar Restrição de Setor (Se houver) ---
-        # Se o usuário mandou travar setores, identificamos os ativos e mudamos o 'xu' para 0.0
-        ativos_zerados_count = 0
+        xl = np.full(n_ativos, 0.0)
+        
+        # --- CÁLCULO DOS LIMITES SUPERIORES (LIQUIDEZ) ---
+        # Regra: Alocação (R$) <= 1% do Volume Médio Diário
+        # Alocação (R$) = Peso * Valor_Investido
+        # Logo: Peso <= (0.01 * Volume) / Valor_Investido
+        
+        # 1. Calcula o teto financeiro permitido por ativo
+        teto_financeiro_liquidez = 0.01 * volume_medio.values
+        
+        # 2. Converte para teto em peso (0 a 1)
+        # Evita divisão por zero se valor investido for nulo (apenas segurança)
+        inv = valor_investido if valor_investido > 0 else 1.0
+        max_peso_liquidez = teto_financeiro_liquidez / inv
+        
+        # 3. O limite final é o menor entre: 1.0 (100%) e o Teto de Liquidez
+        # Ex: Se liquidez permite 200% da carteira, trava em 100%.
+        # Ex: Se liquidez permite apenas 5%, trava em 5%.
+        xu = np.minimum(0.300, max_peso_liquidez)
+        
+        # --- CÁLCULO DOS LIMITES (SETORES PROIBIDOS) ---
         if setores_proibidos and nomes_ativos and mapa_setores:
-            print(f"--> Aplicando restrições para setores: {setores_proibidos}")
-            
-            # Cria mapa reverso: Ticker -> Índice
             ticker_to_idx = {ticker: i for i, ticker in enumerate(nomes_ativos)}
-            
             for setor in setores_proibidos:
                 if setor in mapa_setores:
                     for ativo in mapa_setores[setor]:
                         if ativo in ticker_to_idx:
                             idx = ticker_to_idx[ativo]
-                            xu[idx] = 0.0 # Trava o ativo
-                            ativos_zerados_count += 1
-            
-            print(f"--> Total de ativos travados em 0.0: {ativos_zerados_count}")
-        else:
-            print("--> Otimização sem restrições de setor (Todos ativos liberados).")
-
-        # --- 3. Inicializar Problema Pymoo ---
-        super().__init__(
-            n_var=n_ativos,
-            n_obj=1,       # 1 Objetivo (Minimizar Função Utilidade)
-            n_constr=1,    # 1 Restrição Desigualdade (Risco Teto)
-            n_eq_constr=1, # 1 Restrição Igualdade (Soma = 1)
-            xl=xl,
-            xu=xu          # Passamos os limites (que podem ter zeros ou não)
-        )
+                            xu[idx] = 0.0 # Força zero (sobrescreve liquidez)
+                            
+        # Verifica se algum limite ficou negativo (erro de dados) e corrige pra 0
+        xu = np.maximum(0.0, xu)
+        
+        # Debug: Mostrar quantos ativos foram limitados pela liquidez
+        # Consideramos limitado se o teto for menor que 0.10 (10%)
+        limitados = np.sum((xu < 0.05) & (xu > 0.0))
+        print(f"--> Restrição de Liquidez: {limitados} ativos limitados a <5% da carteira.")
+                            
+        super().__init__(n_var=n_ativos, n_obj=1, n_constr=1, n_eq_constr=1, xl=xl, xu=xu)
 
     def _evaluate(self, x, out, *args, **kwargs):
-        # --- Cálculos Vetorizados ---
+        # 1. Retorno Esperado
+        retorno_port = x.dot(self.retornos_medios)
         
-        # 1. Retorno Esperado: (pesos * retornos)
-        retorno_calculado = x.dot(self.retornos_medios)
-        
-        # 2. Variância: (pesos * COV * pesos_transposto)
-        # einsum é usado para calcular a forma quadrática para múltiplas soluções (população) de uma vez
+        # 2. Variância
         variancia = np.einsum('...i,ij,...j->...', x, self.matriz_cov, x)
+        risco_vol = np.sqrt(np.maximum(variancia, 1e-12))
         
-        # 3. Desvio Padrão (Apenas para verificar a restrição do usuário)
-        risco_calculado = np.sqrt(np.maximum(variancia, 1e-12))
+        # 3. P/VP e CVaR
+        pvp_port = x.dot(self.vetor_pvp)
+        cvar_port = x.dot(self.vetor_cvar)
         
-        # --- FUNÇÃO OBJETIVO ---
-        # Minimizamos: (Aversão * Variância) - Retorno
-        out["F"] = (self.lambda_aversao_risco * variancia) - retorno_calculado
+        # Função Objetivo (Multiobjetivo Scalarizado)
+        # Pesos calibrados no config.py
+        obj = (self.lambda_aversao_risco * variancia) - retorno_port \
+              + (config.PESO_PVP * pvp_port) \
+              + (config.PESO_CVAR * cvar_port)
         
-        # --- RESTRIÇÕES ---
+        out["F"] = obj
         
-        # H (Igualdade): Soma dos pesos - 1.0 = 0
+        # Restrições
         out["H"] = np.sum(x, axis=1) - 1.0
-        
-        # G (Desigualdade): Risco Calculado - Risco Teto <= 0
-        out["G"] = risco_calculado - self.risco_maximo_usuario
+        out["G"] = risco_vol - self.risco_maximo_usuario

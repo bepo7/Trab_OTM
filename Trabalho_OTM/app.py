@@ -102,21 +102,44 @@ def processar_otimizacao():
         nome_ga = 'grafico_ga.png'
         nome_gu_warm = 'grafico_gurobi_warm.png'
         nome_gu_cold = 'grafico_gurobi_cold.png'
+        nome_backtest = 'grafico_backtest.png'
         
         path_ga = os.path.join(STATIC_DIR, nome_ga)
         path_gu_warm = os.path.join(STATIC_DIR, nome_gu_warm)
         path_gu_cold = os.path.join(STATIC_DIR, nome_gu_cold)
+        path_backtest = os.path.join(STATIC_DIR, nome_backtest)
 
-        plot.rodar_visualizacao_tripla(
+        plot.rodar_visualizacao_completa(
             inputs, res_ga, res_gurobi_warm, res_gurobi_cold, 
-            path_ga, path_gu_warm, path_gu_cold
+            path_ga, path_gu_warm, path_gu_cold, path_backtest
         )
 
-        # 5. PREPARAR DADOS GA
+       # ---------------------------------------------------------
+        # 5. PREPARAR DADOS PARA O GRÁFICO INTERATIVO (Chart.js)
+        # ---------------------------------------------------------
+        retornos_hist = inputs['retornos_diarios_historicos']
+        df_bench = inputs['df_benchmarks']
+        
+        # Preparar Benchmarks (CDI e IBOV)
+        bench_cdi = (df_bench['CDI'] / df_bench['CDI'].iloc[0] * 100).tolist()
+        bench_ibov = (df_bench['Ibovespa'] / df_bench['Ibovespa'].iloc[0] * 100).tolist()
+        
+        # Função auxiliar interna
+        def preparar_backtest_carteira(pesos, nomes):
+            dict_pesos = dict(zip(nomes, pesos))
+            pesos_ordenados = [dict_pesos.get(col, 0.0) for col in retornos_hist.columns]
+            datas_cart, valores_cart = preparar_dados.simular_evolucao_diaria(
+                retornos_hist, pesos_ordenados, valor_inicial=100
+            )
+            return datas_cart, valores_cart
+
+        # --- A. DADOS GA ---
         row_ga = res_ga['dataframe_resultado'].iloc[0]
         cols_meta = ['Risco_Alvo', 'Risco_Encontrado_Anual', 'Retorno_Encontrado_Anual']
         pesos_ga_series = row_ga.drop(cols_meta, errors='ignore')
         pesos_ga_final = pesos_ga_series.reindex(nomes_ativos).fillna(0.0).values
+        
+        datas_ga, valores_ga = preparar_backtest_carteira(pesos_ga_final, nomes_ativos)
 
         data_ga = {
             'metricas': {
@@ -124,40 +147,60 @@ def processar_otimizacao():
                 'retorno_aa': res_ga['retorno_final'] * 100,
                 'risco_aa': res_ga['risco_final'] * 100,
                 'score': res_ga['funcao_objetivo'],
-                'tempo': tempo_ga  # <--- ADICIONADO
+                'tempo': tempo_ga
             },
             'alocacao': formatar_dados_para_frontend(nomes_ativos, pesos_ga_final, valor_investir),
-            'grafico_url': url_for('static', filename=nome_ga) + f'?t={timestamp}'
+            'grafico_url': url_for('static', filename=nome_ga) + f'?t={timestamp}',
+            'backtest': {
+                'datas': datas_ga,
+                'carteira': valores_ga,
+                'cdi': bench_cdi,
+                'ibov': bench_ibov
+            }
         }
 
-        # 6a. DADOS GUROBI WARM
+        # --- B. DADOS GUROBI WARM ---
         data_gu_warm = None
         if res_gurobi_warm:
+            datas_gu, valores_gu = preparar_backtest_carteira(res_gurobi_warm['pesos'], nomes_ativos)
             data_gu_warm = {
                 'metricas': {
                     'valor_investido': valor_investir,
                     'retorno_aa': res_gurobi_warm['retorno'] * 100,
                     'risco_aa': res_gurobi_warm['risco'] * 100,
                     'score': res_gurobi_warm['obj'],
-                    'tempo': tempo_gu_warm  # <--- ADICIONADO
+                    'tempo': tempo_gu_warm
                 },
                 'alocacao': formatar_dados_para_frontend(nomes_ativos, res_gurobi_warm['pesos'], valor_investir),
-                'grafico_url': url_for('static', filename=nome_gu_warm) + f'?t={timestamp}'
+                'grafico_url': url_for('static', filename=nome_gu_warm) + f'?t={timestamp}',
+                'backtest': {
+                    'datas': datas_gu,
+                    'carteira': valores_gu,
+                    'cdi': bench_cdi,
+                    'ibov': bench_ibov
+                }
             }
 
-        # 6b. DADOS GUROBI COLD
+        # --- C. DADOS GUROBI COLD ---
         data_gu_cold = None
         if res_gurobi_cold:
+            datas_cold, valores_cold = preparar_backtest_carteira(res_gurobi_cold['pesos'], nomes_ativos)
             data_gu_cold = {
                 'metricas': {
                     'valor_investido': valor_investir,
                     'retorno_aa': res_gurobi_cold['retorno'] * 100,
                     'risco_aa': res_gurobi_cold['risco'] * 100,
                     'score': res_gurobi_cold['obj'],
-                    'tempo': tempo_gu_cold  # <--- ADICIONADO
+                    'tempo': tempo_gu_cold
                 },
                 'alocacao': formatar_dados_para_frontend(nomes_ativos, res_gurobi_cold['pesos'], valor_investir),
-                'grafico_url': url_for('static', filename=nome_gu_cold) + f'?t={timestamp}'
+                'grafico_url': url_for('static', filename=nome_gu_cold) + f'?t={timestamp}',
+                'backtest': {
+                    'datas': datas_cold,
+                    'carteira': valores_cold,
+                    'cdi': bench_cdi,
+                    'ibov': bench_ibov
+                }
             }
 
         return jsonify({

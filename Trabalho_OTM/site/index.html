@@ -4,6 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Otimizador de Portfólio (Comparativo Triplo)</title>
+    
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
     <style>
         :root {
             --bg-light: #e8f5e9;
@@ -85,6 +88,9 @@
         .gu-warm-table th { background-color: var(--gurobi-warm-color); }
         .gu-cold-table th { background-color: var(--gurobi-cold-color); }
 
+        /* ADICIONADO: Estilo para o container do gráfico de linha */
+        .line-chart-container { height: 450px; position: relative; }
+
         /* Loading */
         .loading-container { text-align: center; padding: 50px 0; }
         .spinner { border: 8px solid #f3f3f3; border-top: 8px solid var(--secondary-color); border-radius: 50%; width: 60px; height: 60px; animation: spin 1s linear infinite; margin: 0 auto 20px; }
@@ -160,6 +166,7 @@
                 <div class="result-base-card table-card"><div class="table-scroll-area">
                     <table id="table_GA"><thead><tr><th>Ativo</th><th>Peso</th><th>Valor</th></tr></thead><tbody></tbody></table>
                 </div></div>
+                <div class="result-base-card line-chart-container"><canvas id="chart_line_GA"></canvas></div>
             </div>
         </div>
 
@@ -176,6 +183,7 @@
                 <div class="result-base-card table-card"><div class="table-scroll-area">
                     <table id="table_GU_WARM" class="gu-warm-table"><thead><tr><th>Ativo</th><th>Peso</th><th>Valor</th></tr></thead><tbody></tbody></table>
                 </div></div>
+                <div class="result-base-card line-chart-container"><canvas id="chart_line_GU_WARM"></canvas></div>
             </div>
         </div>
 
@@ -192,6 +200,7 @@
                 <div class="result-base-card table-card"><div class="table-scroll-area">
                     <table id="table_GU_COLD" class="gu-cold-table"><thead><tr><th>Ativo</th><th>Peso</th><th>Valor</th></tr></thead><tbody></tbody></table>
                 </div></div>
+                 <div class="result-base-card line-chart-container"><canvas id="chart_line_GU_COLD"></canvas></div>
             </div>
         </div>
 
@@ -260,6 +269,9 @@
         }
     }
 
+    // --- ADICIONADO: Variáveis e Funções para os Gráficos ---
+    const chartInstances = { GA: null, GU_WARM: null, GU_COLD: null };
+
     function renderizarTudo(data) {
         fillData('GA', data.ga);
         
@@ -282,7 +294,6 @@
         document.getElementById(`ris_${suffix}`).innerText = obj.metricas.risco_aa.toFixed(2) + '%';
         if (obj.metricas.score) document.getElementById(`obj_${suffix}`).innerText = obj.metricas.score.toFixed(5);
         
-        // --- NOVO: Preenche Tempo ---
         if (obj.metricas.tempo !== undefined) {
             document.getElementById(`time_${suffix}`).innerText = obj.metricas.tempo.toFixed(4) + 's';
         }
@@ -293,6 +304,127 @@
         tbody.innerHTML = '';
         obj.alocacao.forEach(item => {
             tbody.innerHTML += `<tr><td style="font-weight:bold">${item.ativo}</td><td>${item.peso.toFixed(2)}%</td><td>${item.valor.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'})}</td></tr>`;
+        });
+
+        // --- ADICIONADO: Chamada para renderizar o gráfico de linha se houver dados de backtest ---
+        if (obj.backtest) {
+            renderizarGraficoBacktest(suffix, obj.backtest);
+        }
+    }
+
+    // --- ADICIONADO: Função que desenha o gráfico com Chart.js ---
+    function renderizarGraficoBacktest(suffix, dataBacktest) {
+        const canvasId = `chart_line_${suffix}`;
+        const ctx = document.getElementById(canvasId).getContext('2d');
+        const valorInvestido = parseFloat(document.getElementById('valorTotal').value) || 10000;
+
+        // Limpa gráfico anterior se existir
+        if (chartInstances[suffix]) chartInstances[suffix].destroy();
+
+        let colorLine = '#1f5d22'; // Verde (GA)
+        let colorFill = 'rgba(31, 93, 34, 0.1)';
+        
+        if (suffix === 'GU_WARM') { colorLine = '#0056b3'; colorFill = 'rgba(0, 86, 179, 0.1)'; }
+        else if (suffix === 'GU_COLD') { colorLine = '#6a1b9a'; colorFill = 'rgba(106, 27, 154, 0.1)'; }
+
+        // Converte Base 100 para Valor Real
+        const fator = valorInvestido / 100.0;
+        const carteiraReais = dataBacktest.carteira.map(v => v * fator);
+        const cdiReais = dataBacktest.cdi.map(v => v * fator);
+        const ibovReais = dataBacktest.ibov.map(v => v * fator);
+
+        chartInstances[suffix] = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: dataBacktest.datas,
+                datasets: [
+                    {
+                        label: 'Minha Carteira',
+                        data: carteiraReais,
+                        borderColor: colorLine,
+                        backgroundColor: colorFill,
+                        borderWidth: 2,
+                        pointRadius: 0,
+                        pointHoverRadius: 6,
+                        fill: true,
+                        tension: 0.1
+                    },
+                    {
+                        label: 'CDI',
+                        data: cdiReais,
+                        borderColor: '#333',
+                        borderWidth: 2,
+                        borderDash: [5, 5],
+                        pointRadius: 0,
+                        pointHoverRadius: 0,
+                        fill: false,
+                        tension: 0.1
+                    },
+                    {
+                        label: 'Ibovespa',
+                        data: ibovReais,
+                        borderColor: '#888',
+                        borderWidth: 1,
+                        pointRadius: 0,
+                        pointHoverRadius: 0,
+                        fill: false,
+                        tension: 0.1
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: {
+                    mode: 'index',
+                    intersect: false,
+                },
+                plugins: {
+                    title: {
+                        display: true,
+                        text: 'Simulação de Patrimônio (Histórico)',
+                        font: { size: 16 }
+                    },
+                    tooltip: {
+                        enabled: true,
+                        mode: 'index',
+                        position: 'nearest',
+                        callbacks: {
+                            label: function(context) {
+                                let label = context.dataset.label || '';
+                                if (label) label += ': ';
+                                if (context.parsed.y !== null) {
+                                    label += new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(context.parsed.y);
+                                }
+                                return label;
+                            }
+                        }
+                    },
+                    legend: {
+                        position: 'top',
+                        labels: {
+                            usePointStyle: true, // Bolinhas na legenda
+                            boxWidth: 8
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        display: true,
+                        grid: { display: false },
+                        ticks: { maxTicksLimit: 8 }
+                    },
+                    y: {
+                        display: true,
+                        title: { display: true, text: 'Patrimônio (R$)' },
+                        ticks: {
+                            callback: function(value) {
+                                return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumSignificantDigits: 3 }).format(value);
+                            }
+                        }
+                    }
+                }
+            }
         });
     }
 </script>

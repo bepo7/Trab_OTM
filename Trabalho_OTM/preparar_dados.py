@@ -4,204 +4,233 @@ import numpy as np
 import datetime
 from bcb import sgs
 import warnings
+from concurrent.futures import ThreadPoolExecutor
 
-# --- 1. IMPORTAR CONFIGURAÇÕES DO USUÁRIO ---
+# --- 1. IMPORTAR CONFIGURAÇÕES ---
 import config
 
-# --- 2. PARÂMETROS DE IMPLEMENTAÇÃO ---
+# --- 2. PARÂMETROS ---
 BENCHMARK_MERCADO = '^BVSP'
-CDI_CODIGO_BCB = 4389 # CDI Anualizado base 252
+CDI_CODIGO_BCB = 4389
 TAXA_LIVRE_RISCO_FALLBACK = 0.15 
 DIAS_UTEIS_ANO = 252
 
-# Suprimir warnings
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
+# --- FUNÇÕES DE VOLUME E DADOS ---
 
-# --- 3. FUNÇÕES DE COLETA DE DADOS ---
-
-def baixar_taxa_livre_de_risco(data_inicio_str, data_fim_str):
-    """ 
-    Tenta baixar a série histórica do CDI (Cód: 4389) do BCB 
-    apenas para referência de métricas (Sharpe, etc).
-    """
-    print(f"Tentando baixar Taxa CDI (Cód: {CDI_CODIGO_BCB}) do BCB...")
+def baixar_benchmarks(data_inicio, data_fim_str):
+    print("Baixando benchmarks (CDI, IBOV, S&P500)...")
+    
+    # Ajuste de data para o yfinance incluir o último dia
+    # Se data_fim_str for hoje, o yfinance exclui. Precisamos de amanhã.
+    dt_fim = datetime.datetime.strptime(data_fim_str, '%Y-%m-%d').date()
+    dt_fim_ajustada = dt_fim + datetime.timedelta(days=1)
+    
+    # 1. CDI (Banco Central)
     try:
-        cdi_df = sgs.get({'cdi': CDI_CODIGO_BCB}, 
-                           start=data_inicio_str, 
-                           end=data_fim_str)
-        
-        cdi_df = cdi_df.dropna()
-        if cdi_df.empty:
-            raise ValueError("Dados do CDI vieram vazios.")
-
-        ultimo_valor = cdi_df['cdi'].iloc[-1]
-        taxa_real = ultimo_valor / 100.0
-        
-        print(f"Sucesso: CDI real referência obtido ({taxa_real:.2%})")
-        return taxa_real
-        
+        # BCB aceita data normal
+        cdi_diario = sgs.get({'CDI': 12}, start=data_inicio, end=data_fim_str)
+        cdi_fator = (1 + cdi_diario / 100)
+        cdi_acumulado = cdi_fator.cumprod()
+        cdi_acumulado = cdi_acumulado / cdi_acumulado.iloc[0]
+        cdi_acumulado.columns = ['CDI']
     except Exception as e:
-        print(f"Falha ao baixar CDI do BCB: {e}. Usando fallback de {TAXA_LIVRE_RISCO_FALLBACK:.2%}")
-        return TAXA_LIVRE_RISCO_FALLBACK
+        print(f"Erro CDI: {e}")
+        cdi_acumulado = pd.DataFrame()
 
-def baixar_dados_ativos(lista_de_tickers, data_inicio, data_fim):
-    """
-    Baixa os preços de fechamento ajustados para a lista de tickers.
-    Agora inclui LFTS11.SA naturalmente.
-    """
-    
-    if not lista_de_tickers:
-        print("Nenhum ativo para baixar do yfinance.")
-        return pd.DataFrame() 
-    
-    print(f"Baixando dados históricos de {len(lista_de_tickers)} ativos (reais)...")
+    # 2. IBOV e S&P500 (Yahoo Finance)
+    tickers_bench = ['^BVSP', 'IVVB11.SA'] 
     try:
-        # Tenta baixar
-        dados = yf.download(lista_de_tickers, 
-                            start=data_inicio, 
-                            end=data_fim, 
-                            progress=True,
-                            auto_adjust=True)
+        # YF precisa do dia seguinte para incluir o dia atual
+        dados_bench = yf.download(tickers_bench, start=data_inicio, end=dt_fim_ajustada, progress=False, auto_adjust=True)
         
-        if dados.empty:
-            print("Erro: Nenhum dado foi baixado.")
-            return None
-            
-        # Extrai Fechamento (Compatibilidade com versões novas e antigas do YF)
-        if 'Close' in dados.columns:
-            precos = dados['Close']
+        if 'Close' in dados_bench.columns:
+            precos_bench = dados_bench['Close']
         else:
-            precos = dados
-        
-        # Se baixou apenas 1 ativo, garante que é DataFrame
-        if len(lista_de_tickers) == 1 and isinstance(precos, pd.Series):
-            precos = precos.to_frame(lista_de_tickers[0])
+            precos_bench = dados_bench
             
-        # Limpeza Inicial de Colunas Vazias
-        precos = precos.dropna(axis=1, how='all')
+        bench_normalizado = precos_bench.ffill().bfill()
+        bench_normalizado = bench_normalizado / bench_normalizado.iloc[0]
+        bench_normalizado = bench_normalizado.rename(columns={'^BVSP': 'Ibovespa', 'IVVB11.SA': 'S&P500 (BRL)'})
         
-        # Preenchimento de Falhas (Finais de semana/Feriados locais)
-        precos = precos.ffill().bfill()
+    except Exception as e:
+        print(f"Erro Benchmarks YF: {e}")
+        bench_normalizado = pd.DataFrame()
+
+    # Junta tudo e preenche datas faltantes com o valor anterior (ffill) para não cortar o gráfico
+    df_final = pd.concat([cdi_acumulado, bench_normalizado], axis=1).ffill().dropna()
+    return df_final
+
+def baixar_dados_com_volume(lista_de_tickers, data_inicio, data_fim):
+    """ Baixa Preços e Volume com data final ajustada """
+    if not lista_de_tickers: return None, None
+    
+    # AJUSTE CRÍTICO: Data Fim + 1 dia para pegar o pregão de hoje
+    data_fim_ajustada = data_fim + datetime.timedelta(days=1)
+    
+    print(f"Baixando dados para {len(lista_de_tickers)} ativos...")
+    try:
+        dados = yf.download(lista_de_tickers, start=data_inicio, end=data_fim_ajustada, progress=False, auto_adjust=True)
+        if dados.empty: return None, None
         
-        # Limpeza Final
-        precos = precos.dropna(axis=1, how='all')
-        
-        if precos.empty:
-            print("Erro: Dados vazios após limpeza.")
-            return None
+        if 'Close' in dados.columns: precos = dados['Close']
+        else: precos = dados
             
-        print(f"Sucesso: Dados de {len(precos.columns)} ativos válidos foram baixados e alinhados.")
-        return precos
+        if 'Volume' in dados.columns: volumes = dados['Volume']
+        else: volumes = pd.DataFrame(np.nan, index=precos.index, columns=precos.columns)
+
+        if len(lista_de_tickers) == 1:
+            if isinstance(precos, pd.Series): precos = precos.to_frame(lista_de_tickers[0])
+            if isinstance(volumes, pd.Series): volumes = volumes.to_frame(lista_de_tickers[0])
+
+        precos = precos.dropna(axis=1, how='all').ffill().bfill()
+        volumes = volumes.dropna(axis=1, how='all').fillna(0)
+        
+        ativos_comuns = precos.columns.intersection(volumes.columns)
+        return precos[ativos_comuns], volumes[ativos_comuns]
 
     except Exception as e:
-        print(f"Erro crítico durante o download do yfinance: {e}")
-        return None
+        print(f"Erro download: {e}")
+        return None, None
 
-# --- NOVA FUNÇÃO DE LIMPEZA ROBUSTA ---
-def limpar_matriz_covariancia_e_retornos(retornos_medios, matriz_cov):
-    """
-    Remove ativos que causam instabilidade matemática (NaN/Inf).
-    """
+def simular_evolucao_diaria(retornos_hist, pesos, valor_inicial=100):
+    """ Calcula evolução diária para o gráfico JS """
+    pesos_series = pd.Series(pesos, index=retornos_hist.columns)
+    # Alinhamento seguro: preenche dias faltantes com 0 de retorno
+    retorno_diario = (retornos_hist * pesos_series).sum(axis=1).fillna(0)
+    acumulado = (1 + retorno_diario).cumprod() * valor_inicial
+    valores = acumulado.values.tolist()
+    datas = [d.strftime('%Y-%m-%d') for d in acumulado.index]
+    return datas, valores
+
+def pegar_pvp_individual(ticker):
+    try:
+        t = yf.Ticker(ticker)
+        val = t.info.get('priceToBook')
+        if val is None: return ticker, np.nan
+        val_float = float(val)
+        if val_float <= 0: return ticker, 20.0 
+        return ticker, val_float
+    except: return ticker, np.nan
+
+def obter_pvp_ativos_otimizado(lista_tickers):
+    print(f"\nBaixando P/VP (Paralelo)...")
+    pvp_data = {}
+    
+    with ThreadPoolExecutor(max_workers=20) as executor:
+        resultados = executor.map(pegar_pvp_individual, lista_tickers)
+        for ticker, valor in resultados:
+            pvp_data[ticker] = valor
+            
+    serie = pd.Series(pvp_data)
+    
+    # Preenche falhas com a média
+    media = serie.mean()
+    if np.isnan(media): media = 1.0
+    
+    return serie.fillna(media)
+
+def calcular_cvar_95(retornos):
+    cvar_dict = {}
+    for ativo in retornos.columns:
+        rets = retornos[ativo].values
+        if len(rets) == 0:
+            cvar_dict[ativo] = 0.05
+            continue
+            
+        rets_sorted = np.sort(rets)
+        cutoff = int(len(rets) * 0.05)
+        if cutoff < 1: cutoff = 1
+        
+        cvar_dict[ativo] = abs(rets_sorted[:cutoff].mean())
+        
+    return pd.Series(cvar_dict)
+
+def limpar_dados(retornos_medios, matriz_cov, volumes_medios):
+    """Limpa ativos ruins e alinha o vetor de volume"""
     ativos_removidos = []
     
-    # 1. Remover Ativos com Média Inválida
-    mask_mu_bad = ~np.isfinite(retornos_medios)
-    if mask_mu_bad.any():
-        bad_assets = retornos_medios[mask_mu_bad].index.tolist()
-        ativos_removidos.extend(bad_assets)
-        retornos_medios = retornos_medios.drop(bad_assets)
-        matriz_cov = matriz_cov.drop(index=bad_assets, columns=bad_assets)
+    # Limpeza padrão (NaN/Inf) em retornos
+    mask = ~np.isfinite(retornos_medios)
+    if mask.any():
+        bad = retornos_medios[mask].index.tolist()
+        ativos_removidos.extend(bad)
 
-    # 2. Remover Ativos com Variância Inválida
+    # Limpeza em covariância
     diag = np.diag(matriz_cov)
-    mask_var_bad = ~np.isfinite(diag)
-    if mask_var_bad.any():
-        indices_ruins = np.where(mask_var_bad)[0]
-        nomes_ruins = matriz_cov.index[indices_ruins].tolist()
-        ativos_removidos.extend(nomes_ruins)
-        retornos_medios = retornos_medios.drop(nomes_ruins)
-        matriz_cov = matriz_cov.drop(index=nomes_ruins, columns=nomes_ruins)
-
-    # 3. Limpeza Iterativa de Covariância
-    while matriz_cov.isnull().values.any():
-        contagem_nans = matriz_cov.isnull().sum(axis=1)
-        pior_ativo = contagem_nans.idxmax()
+    mask_var = ~np.isfinite(diag)
+    if mask_var.any():
+        bad = matriz_cov.index[np.where(mask_var)[0]].tolist()
+        ativos_removidos.extend(bad)
         
-        ativos_removidos.append(pior_ativo)
-        retornos_medios = retornos_medios.drop(pior_ativo)
-        matriz_cov = matriz_cov.drop(index=pior_ativo, columns=pior_ativo)
+    ativos_removidos = list(set(ativos_removidos))
     
     if ativos_removidos:
-        print(f"LIMPEZA ROBUSTA: Removidos {len(ativos_removidos)} ativos problemáticos (NaN/Inf):")
-        print(f" -> {ativos_removidos}")
+        retornos_medios = retornos_medios.drop(ativos_removidos, errors='ignore')
+        matriz_cov = matriz_cov.drop(index=ativos_removidos, columns=ativos_removidos, errors='ignore')
+        volumes_medios = volumes_medios.drop(ativos_removidos, errors='ignore')
         
-    return retornos_medios, matriz_cov
+    return retornos_medios, matriz_cov, volumes_medios
 
-# --- 4. FUNÇÃO PRINCIPAL DE PREPARAÇÃO ---
+# --- FUNÇÃO PRINCIPAL ---
 
 def calcular_inputs_otimizacao(valor_total_investido):
-    
-    lista_de_ativos_config = config.UNIVERSO_COMPLETO
-    if not lista_de_ativos_config:
-        print("Erro: 'UNIVERSO_COMPLETO' no config.py está vazio.")
-        return None
+    # REMOVIDO ARGUMENTO 'anos_historico'
+    lista_ativos = config.UNIVERSO_COMPLETO
+    if not lista_ativos: return None
 
-    # --- 1. Definir Datas ---
+    # Datas
     data_fim = datetime.date.today()
     data_inicio = data_fim - datetime.timedelta(days=config.ANOS_DE_DADOS * 365.25)
     
-    data_fim_str = data_fim.strftime('%Y-%m-%d')
-    data_inicio_str = data_inicio.strftime('%Y-%m-%d')
-    
-    # --- 2. Baixar Taxa de Risco (Referência) ---
-    taxa_livre_de_risco = baixar_taxa_livre_de_risco(data_inicio_str, data_fim_str)
-    
-    # --- 3. Baixar Dados dos Ativos (Incluindo LFTS11) ---
-    precos = baixar_dados_ativos(lista_de_ativos_config, data_inicio, data_fim)
-    
-    if precos is None or precos.empty:
-        print("Erro: Nenhum dado de preço foi obtido.")
-        return None
+    precos, volumes = baixar_dados_com_volume(lista_ativos, data_inicio, data_fim)
+    if precos is None or precos.empty: return None
 
-    # --- 4. Calcular Retornos e Matriz de Covariância ---
-    retornos_diarios = precos.pct_change()
+    retornos_diarios = precos.pct_change().replace([np.inf, -np.inf], np.nan).dropna()
+    if retornos_diarios.empty: return None
     
-    if np.isinf(retornos_diarios.values).any():
-        print("Aviso: Valores infinitos detectados nos retornos. Limpando...")
-        retornos_diarios = retornos_diarios.replace([np.inf, -np.inf], np.nan)
-        
-    retornos_diarios = retornos_diarios.dropna()
-
-    if retornos_diarios.empty:
-        print("Erro: Dados insuficientes após cálculo de retornos.")
-        return None
+    retornos_medios = retornos_diarios.mean() * DIAS_UTEIS_ANO
+    matriz_cov = retornos_diarios.cov() * DIAS_UTEIS_ANO
     
-    print("Calculando μ (Retornos Médios) e Σ (Matriz de Covariância)...")
-    retornos_medios_anuais = retornos_diarios.mean() * DIAS_UTEIS_ANO
-    matriz_cov_anual = retornos_diarios.cov() * DIAS_UTEIS_ANO
+    preco_medio = precos.tail(126).mean()
+    vol_qtd = volumes.tail(126).mean()
+    volume_financeiro = (vol_qtd * preco_medio).fillna(0)
 
-    # Limpeza Robusta
-    retornos_medios_anuais, matriz_cov_anual = limpar_matriz_covariancia_e_retornos(
-        retornos_medios_anuais, 
-        matriz_cov_anual
+    retornos_medios, matriz_cov, volume_financeiro = limpar_dados(
+        retornos_medios, matriz_cov, volume_financeiro
     )
     
-    nomes_dos_ativos_validos = list(retornos_medios_anuais.index)
-        
-    print("\n--- Inputs de Otimização Prontos ---")
+    ativos_validos = list(retornos_medios.index)
+    ret_validos = retornos_diarios[ativos_validos] 
+    
+    vetor_cvar = calcular_cvar_95(ret_validos)
+    vetor_pvp = obter_pvp_ativos_otimizado(ativos_validos)
+    
+    vetor_cvar = vetor_cvar.reindex(ativos_validos).fillna(0.05)
+    vetor_pvp = vetor_pvp.reindex(ativos_validos).fillna(1.0)
+    volume_financeiro = volume_financeiro.reindex(ativos_validos).fillna(0)
+    
+    # 6. BAIXAR BENCHMARKS (Agora usa data_fim para pegar até hoje)
+    inicio_real = ret_validos.index[0].strftime('%Y-%m-%d')
+    df_benchmarks = baixar_benchmarks(inicio_real, data_fim.strftime('%Y-%m-%d'))
+    
+    # Alinhamento final entre Carteira e Benchmark para não cortar datas
+    # Usamos o índice do Benchmark (que geralmente é mais completo) como base se possível,
+    # ou fazemos inner join. Aqui vou forçar o inner join para garantir consistência visual.
+    df_benchmarks = df_benchmarks.reindex(ret_validos.index).ffill()
+
+    print("\n--- Inputs Prontos ---")
     
     return {
-        'valor_total_investido': valor_total_investido, 
-        'retornos_medios': retornos_medios_anuais,
-        'matriz_cov': matriz_cov_anual,
-        'taxa_livre_de_risco': taxa_livre_de_risco, 
-        'nomes_dos_ativos': nomes_dos_ativos_validos,
-        'n_ativos': len(nomes_dos_ativos_validos)
+        'valor_total_investido': valor_total_investido,
+        'retornos_medios': retornos_medios,
+        'matriz_cov': matriz_cov,
+        'vetor_pvp': vetor_pvp,
+        'vetor_cvar': vetor_cvar,
+        'volume_medio': volume_financeiro,
+        'nomes_dos_ativos': ativos_validos,
+        'n_ativos': len(ativos_validos),
+        'retornos_diarios_historicos': ret_validos, 
+        'df_benchmarks': df_benchmarks
     }
-
-if __name__ == '__main__':
-    print("--- TESTE RÁPIDO ---")
-    inputs = calcular_inputs_otimizacao(1000)
-    if inputs:
-        print(f"Sucesso! {inputs['n_ativos']} ativos prontos para o GA.")
