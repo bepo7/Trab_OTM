@@ -21,23 +21,49 @@ TERMINATION = DefaultSingleObjectiveTermination(
     cvtol=1e-20        
 )
 
-# --- CLASSE DE REPARO (Normalização) ---
+MIN_PESO_ATIVO = 0.005  # 0.5%
+
+# --- CLASSE DE REPARO APRIMORADA ---
 class MinimumWeightRepair(Repair):
     def _do(self, problem, X, **kwargs):
-        # Garante que pesos muito pequenos virem zero e a soma seja 1
-        limiar = 0.005 
-        X[X < limiar] = 0.0
+        # Loop iterativo para garantir consistência matemática
+        # Às vezes, ao normalizar, um peso cai abaixo de 0.005. 
+        # Repetimos o processo até estabilizar.
         
-        # Se o modelo tiver limites superiores (xu) iguais a 0 (setores proibidos),
-        # garantimos que o reparo respeite isso forçando 0 novamente.
-        if problem.xu is not None:
-             X = np.minimum(X, problem.xu)
+        for _ in range(5): # Máximo de 5 iterações para evitar loop infinito
+            
+            # 1. Respeita limites superiores (Setores proibidos / Liquidez)
+            if problem.xu is not None:
+                X = np.minimum(X, problem.xu)
 
-        somas = X.sum(axis=1, keepdims=True)
-        somas[somas == 0] = 1.0 
-        X = X / somas
+            # 2. Filtro de Corte (Threshold): Tudo < 0.5% vira 0
+            X[X < MIN_PESO_ATIVO] = 0.0
+            
+            # 3. Normalização (Soma = 1.0)
+            somas = X.sum(axis=1, keepdims=True)
+            
+            # Evita divisão por zero se o indivíduo zerou tudo (re-inicializa aleatório)
+            mask_zero = (somas.flatten() == 0)
+            if mask_zero.any():
+                n_zeros = np.sum(mask_zero)
+                n_cols = X.shape[1]
+                # Gera novos pesos aleatórios uniformes para quem zerou
+                X[mask_zero] = np.random.random((n_zeros, n_cols))
+                # Recalcula soma
+                somas = X.sum(axis=1, keepdims=True)
+
+            X = X / somas
+            
+            # 4. Verificação: Se não há mais violações, para o loop
+            # Uma violação é um valor > 0 mas < 0.005
+            violacoes = (X > 0.0) & (X < MIN_PESO_ATIVO)
+            if not np.any(violacoes):
+                break
+        
+        # Última garantia de limpeza para float muito pequeno (ruído numérico)
+        X[X < 1e-6] = 0.0
+        
         return X
-
 def rodar_otimização(inputs, risco_maximo_usuario, lambda_aversao_risco, setores_proibidos=None):
     # 1. Extração dos Inputs
     retornos_medios = inputs['retornos_medios']
