@@ -46,6 +46,7 @@ def resolver_com_gurobi_setores(inputs, lambda_risk, risco_max_usuario,
     print(f"   > Setores Proibidos: {setores_proibidos}")
     print(f"   > Mínimo de Entrada: {MIN_PESO_ATIVO:.1%}")
     print(f"   > Teto Global por Ativo: {TETO_GLOBAL_ATIVO:.1%}")
+    print()
 
     # --- INÍCIO DO MODELO ---
     model = gp.Model("Portfolio_MultiObj")
@@ -59,7 +60,7 @@ def resolver_com_gurobi_setores(inputs, lambda_risk, risco_max_usuario,
         # A. CÁLCULO DO TETO DE LIQUIDEZ (Igual ao modelo_problema_setor.py)
         # Regra: Só pode comprar até 1% do volume médio diário
         vol_ativo = volume_medio.get(ticker, 0.0)
-        teto_financeiro = 0.05 * vol_ativo
+        teto_financeiro = 0.1 * vol_ativo
         max_peso_liquidez = teto_financeiro / valor_investido
         
         # B. DEFINIÇÃO DO LIMITE SUPERIOR (UB)
@@ -139,12 +140,17 @@ def resolver_com_gurobi_setores(inputs, lambda_risk, risco_max_usuario,
         # Recalcula métricas puras para exibir
         ret_final = np.dot(w_otimo, retornos)
         var_final = np.dot(w_otimo, np.dot(cov_matrix, w_otimo))
+
+        pvp_final = np.dot(w_otimo, vals_pvp)
+        cvar_final = np.dot(w_otimo, vals_cvar)
         
         return {
             'pesos': w_otimo,
             'obj': model.ObjVal,
             'retorno': ret_final,
-            'risco': np.sqrt(var_final)
+            'risco': np.sqrt(var_final),
+            'pvp_final': pvp_final,
+            'cvar_final': cvar_final
         }
     else:
         # Se falhar, tenta relaxar a precisão numérica

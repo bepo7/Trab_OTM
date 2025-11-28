@@ -22,48 +22,45 @@ TERMINATION = DefaultSingleObjectiveTermination(
 )
 
 MIN_PESO_ATIVO = 0.005  # 0.5%
+TETO_GLOBAL_ATIVO = 0.30
 
-# --- CLASSE DE REPARO APRIMORADA ---
 class MinimumWeightRepair(Repair):
     def _do(self, problem, X, **kwargs):
-        # Loop iterativo para garantir consistência matemática
-        # Às vezes, ao normalizar, um peso cai abaixo de 0.005. 
-        # Repetimos o processo até estabilizar.
+        # 1. SEGURANÇA: Remove NaNs e Infinitos que possam ter vindo do Crossover
+        # Se vier lixo, transforma em 0.0
+        X = np.nan_to_num(X, nan=0.0, posinf=0.0, neginf=0.0)
         
-        for _ in range(5): # Máximo de 5 iterações para evitar loop infinito
-            
-            # 1. Respeita limites superiores (Setores proibidos / Liquidez)
-            if problem.xu is not None:
-                X = np.minimum(X, problem.xu)
+        # 2. Limpeza de ruído (pesos muito pequenos viram zero)
+        X[X < 0.005] = 0.0
+        
+        # 3. Garante limites superiores iniciais (setores proibidos e liquidez)
+        if problem.xu is not None:
+             X = np.minimum(X, problem.xu)
 
-            # 2. Filtro de Corte (Threshold): Tudo < 0.5% vira 0
-            X[X < MIN_PESO_ATIVO] = 0.0
-            
-            # 3. Normalização (Soma = 1.0)
+        # 4. Normalização Iterativa "Smart"
+        for _ in range(20): # Tenta corrigir por 20 iterações
             somas = X.sum(axis=1, keepdims=True)
             
-            # Evita divisão por zero se o indivíduo zerou tudo (re-inicializa aleatório)
-            mask_zero = (somas.flatten() == 0)
-            if mask_zero.any():
-                n_zeros = np.sum(mask_zero)
-                n_cols = X.shape[1]
-                # Gera novos pesos aleatórios uniformes para quem zerou
-                X[mask_zero] = np.random.random((n_zeros, n_cols))
-                # Recalcula soma
-                somas = X.sum(axis=1, keepdims=True)
-
-            X = X / somas
+            # --- CORREÇÃO DO ERRO DE DIVISÃO ---
+            # Adicionamos 1e-9 para nunca dividir por zero absoluto
+            X = X / (somas + 1e-9)
             
-            # 4. Verificação: Se não há mais violações, para o loop
-            # Uma violação é um valor > 0 mas < 0.005
-            violacoes = (X > 0.0) & (X < MIN_PESO_ATIVO)
-            if not np.any(violacoes):
-                break
+            # Verifica se a normalização fez alguém estourar o limite (ex: 31%)
+            if problem.xu is not None:
+                X_clipped = np.minimum(X, problem.xu)
+                
+                # Se já está tudo dentro do limite, para
+                if np.allclose(X, X_clipped, atol=1e-5):
+                    X = X_clipped
+                    break
+                
+                X = X_clipped
         
-        # Última garantia de limpeza para float muito pequeno (ruído numérico)
-        X[X < 1e-6] = 0.0
-        
-        return X
+        # 5. SEGURANÇA FINAL: Normalização simples para garantir soma 1.0
+        # (Mesmo que viole minimamente o teto em casas decimais, a soma 1 é prioritária pro solver não quebrar)
+        somas_finais = X.sum(axis=1, keepdims=True)
+        return X / (somas_finais + 1e-9)
+    
 def rodar_otimização(inputs, risco_maximo_usuario, lambda_aversao_risco, setores_proibidos=None):
     # 1. Extração dos Inputs
     retornos_medios = inputs['retornos_medios']
@@ -95,7 +92,13 @@ def rodar_otimização(inputs, risco_maximo_usuario, lambda_aversao_risco, setor
         mapa_setores=mapa_setores,
         setores_proibidos=setores_proibidos
     )
-
+    
+    print(f"[GA] Configurando restrições...")
+    print(f"   > Setores Proibidos: {setores_proibidos}")
+    print(f"   > Mínimo de Entrada: {MIN_PESO_ATIVO:.1%}")
+    print(f"   > Teto Global por Ativo: {TETO_GLOBAL_ATIVO:.1%}")
+    print()
+        
     print(f"[GA] Rodando Evolução. Parada: 100 gerações ESTÁVEIS ou {NUM_GERACOES} gerações.")
     
     algoritmo = GA(
@@ -121,10 +124,8 @@ def rodar_otimização(inputs, risco_maximo_usuario, lambda_aversao_risco, setor
         variancia = pesos_otimos.dot(matriz_cov).dot(pesos_otimos)
         risco_otimo = np.sqrt(variancia)
         retorno_otimo = pesos_otimos.dot(retornos_medios)
-        
-        print(f"  Valor da função objetivo: {utility_score:.4f}")
-        print(f"  Risco Encontrado: {risco_otimo:.2%} (Teto: {risco_maximo_usuario:.2%})")
-        print(f"  Retorno Esperado: {retorno_otimo:.2%}")
+        pvp_final = pesos_otimos.dot(vetor_pvp)
+        cvar_final = pesos_otimos.dot(vetor_cvar)
         
         # --- CRIAÇÃO DO DATAFRAME (Necessário para o plot.py) ---
         df_pesos = pd.DataFrame([pesos_otimos], columns=nomes_dos_ativos)
@@ -146,7 +147,9 @@ def rodar_otimização(inputs, risco_maximo_usuario, lambda_aversao_risco, setor
                 "retorno_esperado": retorno_otimo,
                 "risco_esperado": risco_otimo,
                 "funcao_objetivo": utility_score,
-                "lambda_risco": lambda_aversao_risco
+                "lambda_risco": lambda_aversao_risco,
+                "pvp_final": pvp_final,   
+                "cvar_final": cvar_final
             },
             "dataframe_resultado": df_final, # <--- Corrigido (agora é um DF real)
             "nome_arquivo_csv": nome_arq,

@@ -76,22 +76,20 @@
 
         .results-grid { display: flex; flex-direction: column; gap: 30px; }
         .result-base-card { background: #f8fdf9; padding: 20px; border-radius: 10px; border: 1px solid #e0e0e0; }
-        .plot-placeholder img { width: 100%; height: auto; border-radius: 8px; }
+        .plot-placeholder img { width: 100%; height: auto; border-radius: 8px; max-width: 850px; }
+        .chart-card { display: flex; justify-content: center; }
 
         .table-card { height: 500px; display: flex; flex-direction: column; }
         .table-scroll-area { flex-grow: 1; overflow-y: auto; }
         table { width: 100%; border-collapse: separate; border-spacing: 0; }
         th, td { text-align: left; padding: 12px; border-bottom: 1px solid #ddd; }
         
-        /* Cores de Cabeçalho de Tabela */
         th { position: sticky; top: 0; background-color: var(--subtitle-color); color: white; }
         .gu-warm-table th { background-color: var(--gurobi-warm-color); }
         .gu-cold-table th { background-color: var(--gurobi-cold-color); }
 
-        /* Estilo para o container do gráfico de linha */
         .line-chart-container { height: 450px; position: relative; }
 
-        /* Loading */
         .loading-container { text-align: center; padding: 50px 0; }
         .spinner { border: 8px solid #f3f3f3; border-top: 8px solid var(--secondary-color); border-radius: 50%; width: 60px; height: 60px; animation: spin 1s linear infinite; margin: 0 auto 20px; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
@@ -103,7 +101,7 @@
 
     <div id="step1" class="step active">
         <h1>Otimizador de Portfólio</h1>
-        <p style="text-align: center; color: #666;">Comparativo: GA vs. Gurobi (Warm Start) vs. Gurobi (Cold Start)</p>
+        <p style="text-align: center; color: #666;">Comparativo: GA vs. Gurobi</p>
         
         <div class="form-group">
             <label>Valor Total (R$)</label>
@@ -114,7 +112,7 @@
             <input type="number" id="lambdaFactor" value="50.0" step="0.1">
         </div>
         <div class="form-group">
-            <label>Risco Máximo (%)</label>
+            <label>Volatilidade Máxima (%)</label>
             <input type="number" id="riskCap" value="15">
         </div>
 
@@ -140,7 +138,7 @@
         <div class="loading-container">
             <div class="spinner"></div>
             <h2>Otimizando...</h2>
-            <p>Executando GA, Gurobi com GA e Gurobi Puro...</p>
+            <p>Executando Algoritmos (GA, Gurobi Warm, Gurobi Cold)...</p>
         </div>
     </div>
 
@@ -157,7 +155,10 @@
             <div class="metrics-summary">
                 <div class="metric"><div class="metric-value" id="val_GA">R$ 0</div><div class="metric-label">Investido</div></div>
                 <div class="metric"><div class="metric-value" id="ret_GA">0%</div><div class="metric-label">Retorno</div></div>
-                <div class="metric"><div class="metric-value" id="ris_GA">0%</div><div class="metric-label">Risco</div></div>
+                <div class="metric"><div class="metric-value" id="ris_GA">0%</div><div class="metric-label">Volatilidade</div></div>
+                
+                <div class="metric"><div class="metric-value" id="pvp_GA">0.00</div><div class="metric-label">P/VP</div></div>
+                <div class="metric"><div class="metric-value" id="cvar_GA">0%</div><div class="metric-label">CVaR</div></div>
                 <div class="metric"><div class="metric-value" id="obj_GA">0.0000</div><div class="metric-label">Objetivo</div></div>
                 <div class="metric"><div class="metric-value" id="time_GA">0.00s</div><div class="metric-label">Tempo (s)</div></div>
             </div>
@@ -174,7 +175,10 @@
             <div class="metrics-summary gu-warm-theme">
                 <div class="metric"><div class="metric-value" id="val_GU_WARM">R$ 0</div><div class="metric-label">Investido</div></div>
                 <div class="metric"><div class="metric-value" id="ret_GU_WARM">0%</div><div class="metric-label">Retorno</div></div>
-                <div class="metric"><div class="metric-value" id="ris_GU_WARM">0%</div><div class="metric-label">Risco</div></div>
+                <div class="metric"><div class="metric-value" id="ris_GU_WARM">0%</div><div class="metric-label">Volatilidade</div></div>
+                
+                <div class="metric"><div class="metric-value" id="pvp_GU_WARM">0.00</div><div class="metric-label">P/VP</div></div>
+                <div class="metric"><div class="metric-value" id="cvar_GU_WARM">0%</div><div class="metric-label">CVaR</div></div>
                 <div class="metric"><div class="metric-value" id="obj_GU_WARM">0.0000</div><div class="metric-label">Objetivo</div></div>
                 <div class="metric"><div class="metric-value" id="time_GU_WARM">0.00s</div><div class="metric-label">Tempo (s)</div></div>
             </div>
@@ -191,7 +195,10 @@
             <div class="metrics-summary gu-cold-theme">
                 <div class="metric"><div class="metric-value" id="val_GU_COLD">R$ 0</div><div class="metric-label">Investido</div></div>
                 <div class="metric"><div class="metric-value" id="ret_GU_COLD">0%</div><div class="metric-label">Retorno</div></div>
-                <div class="metric"><div class="metric-value" id="ris_GU_COLD">0%</div><div class="metric-label">Risco</div></div>
+                <div class="metric"><div class="metric-value" id="ris_GU_COLD">0%</div><div class="metric-label">Volatilidade</div></div>
+                
+                <div class="metric"><div class="metric-value" id="pvp_GU_COLD">0.00</div><div class="metric-label">P/VP</div></div>
+                <div class="metric"><div class="metric-value" id="cvar_GU_COLD">0%</div><div class="metric-label">CVaR</div></div>
                 <div class="metric"><div class="metric-value" id="obj_GU_COLD">0.0000</div><div class="metric-label">Objetivo</div></div>
                 <div class="metric"><div class="metric-value" id="time_GU_COLD">0.00s</div><div class="metric-label">Tempo (s)</div></div>
             </div>
@@ -209,7 +216,21 @@
 
 </div>
 
+<div id="statusBar" style="position: fixed; bottom: 20px; right: 20px; background: white; padding: 10px 20px; border-radius: 30px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); display: flex; align-items: center; gap: 10px; font-size: 14px; font-weight: bold; color: #333; transition: opacity 0.5s;">
+    <div class="mini-spinner" style="border: 3px solid #f3f3f3; border-top: 3px solid #2e7d32; border-radius: 50%; width: 15px; height: 15px; animation: spin 1s linear infinite;"></div>
+    <span id="statusText">Iniciando sistema...</span>
+</div>
+
 <script>
+    // --- LÓGICA DE PRÉ-CARREGAMENTO ---
+    document.addEventListener("DOMContentLoaded", function() {
+        fetch('/pre-carregar').then(res => res.json()).then(data => {
+            console.log("Pré-carregamento:", data);
+            verificarStatus();
+        }).catch(err => console.error("Erro pré-load", err));
+    });
+
+    // --- FUNÇÕES DE UI ---
     function showStep(id) {
         document.querySelectorAll('.step').forEach(el => el.classList.remove('active'));
         document.getElementById(id).classList.add('active');
@@ -221,27 +242,22 @@
     function switchTab(tabName) {
         document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
         document.querySelectorAll('.tab-btn').forEach(el => {
-            el.classList.remove('active');
-            el.classList.remove('active-gu-warm');
-            el.classList.remove('active-gu-cold');
+            el.classList.remove('active'); el.classList.remove('active-gu-warm'); el.classList.remove('active-gu-cold');
         });
-
         document.getElementById('content-' + tabName).classList.add('active');
         
         const btn = document.getElementById('btnTab' + tabName.toUpperCase().replace('_', ''));
-        
         if (tabName === 'gu_warm') btn.classList.add('active-gu-warm');
         else if (tabName === 'gu_cold') btn.classList.add('active-gu-cold');
         else btn.classList.add('active');
     }
 
+    // --- EXECUÇÃO ---
     async function startOptimization() {
         const modoSetor = document.querySelector('input[name="sectorMode"]:checked').value;
         let proibidos = [];
         if (modoSetor === 'custom') {
-            document.querySelectorAll('#sectorList input[type="checkbox"]').forEach(cb => {
-                if (!cb.checked) proibidos.push(cb.value);
-            });
+            document.querySelectorAll('#sectorList input[type="checkbox"]').forEach(cb => { if (!cb.checked) proibidos.push(cb.value); });
         }
 
         showStep('loading');
@@ -273,7 +289,6 @@
 
     function renderizarTudo(data) {
         fillData('GA', data.ga);
-        
         if (data.gurobi_warm) {
             document.getElementById('btnTabGUWarm').style.display = 'inline-block';
             fillData('GU_WARM', data.gurobi_warm);
@@ -288,29 +303,38 @@
     }
 
     function fillData(suffix, obj) {
+        // Métricas básicas
         document.getElementById(`val_${suffix}`).innerText = Number(obj.metricas.valor_investido).toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'});
         document.getElementById(`ret_${suffix}`).innerText = obj.metricas.retorno_aa.toFixed(2) + '%';
         document.getElementById(`ris_${suffix}`).innerText = obj.metricas.risco_aa.toFixed(2) + '%';
-        if (obj.metricas.score) document.getElementById(`obj_${suffix}`).innerText = obj.metricas.score.toFixed(5);
         
-        if (obj.metricas.tempo !== undefined) {
-            document.getElementById(`time_${suffix}`).innerText = obj.metricas.tempo.toFixed(4) + 's';
+        // NOVOS DADOS (Agora seguros pois existem no HTML)
+        if (obj.metricas.pvp !== undefined) {
+            document.getElementById(`pvp_${suffix}`).innerText = obj.metricas.pvp.toFixed(2);
+        }
+        if (obj.metricas.cvar !== undefined) {
+            document.getElementById(`cvar_${suffix}`).innerText = obj.metricas.cvar.toFixed(2) + '%';
         }
 
+        if (obj.metricas.score) document.getElementById(`obj_${suffix}`).innerText = obj.metricas.score.toFixed(5);
+        if (obj.metricas.tempo !== undefined) document.getElementById(`time_${suffix}`).innerText = obj.metricas.tempo.toFixed(4) + 's';
+
+        // Pizza
         document.getElementById(`plot_${suffix}`).innerHTML = `<img src="${obj.grafico_url}" alt="Gráfico ${suffix}">`;
 
+        // Tabela
         const tbody = document.querySelector(`#table_${suffix} tbody`);
         tbody.innerHTML = '';
         obj.alocacao.forEach(item => {
             tbody.innerHTML += `<tr><td style="font-weight:bold">${item.ativo}</td><td>${item.peso.toFixed(2)}%</td><td>${item.valor.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'})}</td></tr>`;
         });
 
+        // Gráfico JS
         if (obj.backtest) {
             renderizarGraficoBacktest(suffix, obj.backtest);
         }
     }
 
-    // --- GRÁFICO ATUALIZADO (INCLUINDO S&P 500) ---
     function renderizarGraficoBacktest(suffix, dataBacktest) {
         const canvasId = `chart_line_${suffix}`;
         const ctx = document.getElementById(canvasId).getContext('2d');
@@ -318,9 +342,7 @@
 
         if (chartInstances[suffix]) chartInstances[suffix].destroy();
 
-        let colorLine = '#1f5d22'; 
-        let colorFill = 'rgba(31, 93, 34, 0.1)';
-        
+        let colorLine = '#1f5d22'; let colorFill = 'rgba(31, 93, 34, 0.1)';
         if (suffix === 'GU_WARM') { colorLine = '#0056b3'; colorFill = 'rgba(0, 86, 179, 0.1)'; }
         else if (suffix === 'GU_COLD') { colorLine = '#6a1b9a'; colorFill = 'rgba(106, 27, 154, 0.1)'; }
 
@@ -372,7 +394,7 @@
                     {
                         label: 'S&P 500 (BRL)',
                         data: sp500Reais,
-                        borderColor: '#d32f2f', // VERMELHO
+                        borderColor: '#d32f2f', 
                         borderWidth: 1.5,
                         pointRadius: 0,
                         pointHoverRadius: 0,

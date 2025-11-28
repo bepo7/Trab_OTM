@@ -12,7 +12,7 @@ import config
 
 # --- 2. PARÂMETROS ---
 DIAS_UTEIS_ANO = 252
-ARQUIVO_CACHE_BENCH = "benchmarks_cache.csv" # Nome do arquivo de cache
+ARQUIVO_CACHE_BENCH = "Trabalho_OTM/benchmarks_cache.csv" # Nome do arquivo de cache
 
 warnings.simplefilter(action='ignore', category=FutureWarning)
 

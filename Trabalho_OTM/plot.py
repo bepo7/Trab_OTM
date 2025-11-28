@@ -50,7 +50,7 @@ def plot_pizza_por_ativos(serie_pesos, risco, retorno, valor_investido, nome_arq
     
     plt.title(
         f"{titulo_personalizado}\n"
-        f"Risco: {risco:.2%} | Retorno: {retorno:.2%}",
+        f"Volatilidade: {risco:.2%} | Retorno: {retorno:.2%}",
         fontsize=14, pad=20
     )
     
@@ -58,55 +58,9 @@ def plot_pizza_por_ativos(serie_pesos, risco, retorno, valor_investido, nome_arq
     plt.savefig(nome_arquivo, dpi=150)
     plt.close(fig)
 
-# --- FUNÇÃO 2: BACKTEST (NOVA) ---
-def plotar_comparativo_backtest(retornos_ativos, pesos_otimos, df_benchmarks, nome_arquivo):
-    print(f"Gerando gráfico de Backtest: {nome_arquivo}")
-    
-    # 1. Calcular retorno diário da carteira (Soma Ponderada)
-    retorno_diario_port = (retornos_ativos * pesos_otimos).sum(axis=1)
-    
-    # 2. Acumular (Base 100)
-    carteira_acumulada = (1 + retorno_diario_port).cumprod()
-    carteira_acumulada.name = "Minha Carteira"
-    
-    # 3. Juntar com Benchmarks
-    df_final = pd.concat([carteira_acumulada, df_benchmarks], axis=1).dropna()
-    
-    # Normaliza tudo para base 100
-    df_final = df_final / df_final.iloc[0] * 100
-    
-    # 4. Plotagem
-    plt.figure(figsize=(10, 6))
-    
-    # Minha Carteira (Verde Forte)
-    plt.plot(df_final.index, df_final['Minha Carteira'], 
-             color='#006400', linewidth=2.5, label='Sua Carteira Otimizada')
-    
-    # Benchmarks
-    if 'CDI' in df_final.columns:
-        plt.plot(df_final.index, df_final['CDI'], 
-                 color='black', linestyle='--', linewidth=1.5, label='CDI (Renda Fixa)')
-    
-    if 'Ibovespa' in df_final.columns:
-        plt.plot(df_final.index, df_final['Ibovespa'], 
-                 color='blue', alpha=0.5, linewidth=1, label='Ibovespa')
-                 
-    if 'S&P500 (BRL)' in df_final.columns:
-        plt.plot(df_final.index, df_final['S&P500 (BRL)'], 
-                 color='red', alpha=0.5, linewidth=1, label='S&P 500 (BRL)')
-    
-    plt.title("Comparativo Histórico (Simulação 5 Anos)", fontsize=14)
-    plt.ylabel("Evolução de R$ 100", fontsize=10)
-    plt.grid(True, linestyle='--', alpha=0.5)
-    plt.legend()
-    
-    plt.tight_layout()
-    plt.savefig(nome_arquivo, dpi=150)
-    plt.close()
-
 # --- FUNÇÃO PRINCIPAL (AGORA GERA OS 4 GRÁFICOS) ---
 def rodar_visualizacao_completa(inputs, res_ga, res_gurobi_warm, res_gurobi_cold, 
-                                path_ga, path_gu_warm, path_gu_cold, path_backtest):
+                                path_ga, path_gu_warm, path_gu_cold):
     
     valor_total = inputs['valor_total_investido']
     nomes_ativos = inputs['nomes_dos_ativos']
@@ -132,13 +86,7 @@ def rodar_visualizacao_completa(inputs, res_ga, res_gurobi_warm, res_gurobi_cold
         if 'retornos_diarios_historicos' in inputs and 'df_benchmarks' in inputs:
             # Transforma pesos_ga (Series) em array numpy para cálculo
             pesos_array = pesos_ga.reindex(nomes_ativos).fillna(0).values
-            
-            plotar_comparativo_backtest(
-                retornos_ativos=inputs['retornos_diarios_historicos'],
-                pesos_otimos=pesos_array,
-                df_benchmarks=inputs['df_benchmarks'],
-                nome_arquivo=path_backtest
-            )
+    
 
     # 2. PIZZA GUROBI WARM
     if res_gurobi_warm:

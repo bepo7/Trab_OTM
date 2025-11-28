@@ -27,7 +27,7 @@ class OtimizacaoPortfolio(Problem):
         # Logo: Peso <= (0.01 * Volume) / Valor_Investido
         
         # 1. Calcula o teto financeiro permitido por ativo
-        teto_financeiro_liquidez = 0.05 * volume_medio.values
+        teto_financeiro_liquidez = 0.1 * volume_medio.values
         
         # 2. Converte para teto em peso (0 a 1)
         # Evita divisão por zero se valor investido for nulo (apenas segurança)
@@ -54,8 +54,8 @@ class OtimizacaoPortfolio(Problem):
         
         # Debug: Mostrar quantos ativos foram limitados pela liquidez
         # Consideramos limitado se o teto for menor que 0.10 (10%)
-        limitados = np.sum((xu < 0.05) & (xu > 0.0))
-        print(f"--> Restrição de Liquidez: {limitados} ativos limitados a <5% da carteira.")
+        limitados = np.sum((xu < 0.1) & (xu > 0.0))
+        print(f"--> Restrição de Liquidez: {limitados} ativos limitados a <10% da carteira.")
                             
         super().__init__(n_var=n_ativos, n_obj=1, n_constr=1, n_eq_constr=1, xl=xl, xu=xu)
 
