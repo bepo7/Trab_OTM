@@ -3,6 +3,7 @@ import os
 import time
 import traceback
 import numpy as np
+import pandas as pd
 
 # --- CONFIGURAÇÃO DE CAMINHOS ABSOLUTOS ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -125,13 +126,34 @@ def processar_otimizacao():
         bench_ibov = (df_bench['Ibovespa'] / df_bench['Ibovespa'].iloc[0] * 100).tolist()
         
         # Função auxiliar interna
+        # Função auxiliar interna
+        # Preparar Benchmarks (CDI e IBOV) com limpeza de NaN
+        bench_cdi = [
+            None if pd.isna(x) else x 
+            for x in (df_bench['CDI'] / df_bench['CDI'].iloc[0] * 100).tolist()
+        ]
+        
+        bench_ibov = [
+            None if pd.isna(x) else x 
+            for x in (df_bench['Ibovespa'] / df_bench['Ibovespa'].iloc[0] * 100).tolist()
+        ]
         def preparar_backtest_carteira(pesos, nomes):
             dict_pesos = dict(zip(nomes, pesos))
             pesos_ordenados = [dict_pesos.get(col, 0.0) for col in retornos_hist.columns]
+            
             datas_cart, valores_cart = preparar_dados.simular_evolucao_diaria(
                 retornos_hist, pesos_ordenados, valor_inicial=100
             )
-            return datas_cart, valores_cart
+            
+            # --- CORREÇÃO DE NAN ---
+            # O JSON não aceita NaN. Temos que converter para None (null) ou 0.
+            # Aqui vamos converter NaN para None (null no JS), o Chart.js sabe lidar com null.
+            valores_limpos = [
+                None if pd.isna(x) or np.isnan(x) else x 
+                for x in valores_cart
+            ]
+            
+            return datas_cart, valores_limpos
 
         # --- A. DADOS GA ---
         row_ga = res_ga['dataframe_resultado'].iloc[0]
