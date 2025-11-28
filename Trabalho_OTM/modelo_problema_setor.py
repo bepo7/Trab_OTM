@@ -27,7 +27,7 @@ class OtimizacaoPortfolio(Problem):
         # Logo: Peso <= (0.01 * Volume) / Valor_Investido
         
         # 1. Calcula o teto financeiro permitido por ativo
-        teto_financeiro_liquidez = 0.01 * volume_medio.values
+        teto_financeiro_liquidez = 0.05 * volume_medio.values
         
         # 2. Converte para teto em peso (0 a 1)
         # Evita divisão por zero se valor investido for nulo (apenas segurança)

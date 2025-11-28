@@ -59,7 +59,7 @@ def resolver_com_gurobi_setores(inputs, lambda_risk, risco_max_usuario,
         # A. CÁLCULO DO TETO DE LIQUIDEZ (Igual ao modelo_problema_setor.py)
         # Regra: Só pode comprar até 1% do volume médio diário
         vol_ativo = volume_medio.get(ticker, 0.0)
-        teto_financeiro = 0.01 * vol_ativo
+        teto_financeiro = 0.05 * vol_ativo
         max_peso_liquidez = teto_financeiro / valor_investido
         
         # B. DEFINIÇÃO DO LIMITE SUPERIOR (UB)

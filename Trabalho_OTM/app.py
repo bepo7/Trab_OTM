@@ -61,10 +61,9 @@ def processar_otimizacao():
         # 2. Execução: ALGORITMO GENÉTICO (Base)
         # ---------------------------------------------------------
         print(">> Rodando GA...")
-        start_ga = time.time() # INICIO CRONOMETRO
+        start_ga = time.time()
         res_ga = otimizar.rodar_otimização(inputs, risco_teto, lambda_risco, setores_proibidos)
-        end_ga = time.time()   # FIM CRONOMETRO
-        tempo_ga = end_ga - start_ga
+        tempo_ga = time.time() - start_ga
         
         if res_ga is None:
             return jsonify({'sucesso': False, 'erro': 'GA não convergiu.'}), 400
@@ -74,29 +73,25 @@ def processar_otimizacao():
         # ---------------------------------------------------------
         print(">> Rodando Gurobi (Com GA)...")
         pesos_iniciais_ga = res_ga['pesos_finais']
-        
-        start_gu_warm = time.time() # INICIO CRONOMETRO
+        start_gu_warm = time.time()
         res_gurobi_warm = otm_gurobi_setores.resolver_com_gurobi_setores(
             inputs, lambda_risco, risco_teto, 
             warm_start_pesos=pesos_iniciais_ga, 
             setores_proibidos=setores_proibidos
         )
-        end_gu_warm = time.time()   # FIM CRONOMETRO
-        tempo_gu_warm = end_gu_warm - start_gu_warm
+        tempo_gu_warm = time.time() - start_gu_warm
 
         # ---------------------------------------------------------
         # 3b. Execução: GUROBI COLD START (Sem GA)
         # ---------------------------------------------------------
         print(">> Rodando Gurobi (Puro/Cold Start)...")
-        
-        start_gu_cold = time.time() # INICIO CRONOMETRO
+        start_gu_cold = time.time()
         res_gurobi_cold = otm_gurobi_setores.resolver_com_gurobi_setores(
             inputs, lambda_risco, risco_teto, 
             warm_start_pesos=None,  
             setores_proibidos=setores_proibidos
         )
-        end_gu_cold = time.time()   # FIM CRONOMETRO
-        tempo_gu_cold = end_gu_cold - start_gu_cold
+        tempo_gu_cold = time.time() - start_gu_cold
 
         # 4. Geração de Imagens
         timestamp = int(time.time())
@@ -105,14 +100,12 @@ def processar_otimizacao():
         nome_gu_cold = 'grafico_gurobi_cold.png'
         nome_backtest = 'grafico_backtest.png'
         
-        path_ga = os.path.join(STATIC_DIR, nome_ga)
-        path_gu_warm = os.path.join(STATIC_DIR, nome_gu_warm)
-        path_gu_cold = os.path.join(STATIC_DIR, nome_gu_cold)
-        path_backtest = os.path.join(STATIC_DIR, nome_backtest)
-
         plot.rodar_visualizacao_completa(
             inputs, res_ga, res_gurobi_warm, res_gurobi_cold, 
-            path_ga, path_gu_warm, path_gu_cold, path_backtest
+            os.path.join(STATIC_DIR, nome_ga), 
+            os.path.join(STATIC_DIR, nome_gu_warm), 
+            os.path.join(STATIC_DIR, nome_gu_cold), 
+            os.path.join(STATIC_DIR, nome_backtest)
         )
 
        # ---------------------------------------------------------
@@ -121,38 +114,28 @@ def processar_otimizacao():
         retornos_hist = inputs['retornos_diarios_historicos']
         df_bench = inputs['df_benchmarks']
         
-        # Preparar Benchmarks (CDI e IBOV)
-        bench_cdi = (df_bench['CDI'] / df_bench['CDI'].iloc[0] * 100).tolist()
-        bench_ibov = (df_bench['Ibovespa'] / df_bench['Ibovespa'].iloc[0] * 100).tolist()
+        # Preparar Benchmarks (CDI, IBOV, S&P500) - Normaliza para Base 100
+        # O try/except é para evitar crash se uma coluna falhar
+        try: bench_cdi = (df_bench['CDI'] * 100).fillna(100).tolist()
+        except: bench_cdi = []
         
-        # Função auxiliar interna
-        # Função auxiliar interna
-        # Preparar Benchmarks (CDI e IBOV) com limpeza de NaN
-        bench_cdi = [
-            None if pd.isna(x) else x 
-            for x in (df_bench['CDI'] / df_bench['CDI'].iloc[0] * 100).tolist()
-        ]
-        
-        bench_ibov = [
-            None if pd.isna(x) else x 
-            for x in (df_bench['Ibovespa'] / df_bench['Ibovespa'].iloc[0] * 100).tolist()
-        ]
+        try: bench_ibov = (df_bench['Ibovespa'] * 100).fillna(100).tolist()
+        except: bench_ibov = []
+            
+        try: bench_sp500 = (df_bench['S&P500 (BRL)'] * 100).fillna(100).tolist()
+        except: bench_sp500 = []
+
         def preparar_backtest_carteira(pesos, nomes):
             dict_pesos = dict(zip(nomes, pesos))
             pesos_ordenados = [dict_pesos.get(col, 0.0) for col in retornos_hist.columns]
             
+            # Base 100 para ficar na mesma escala dos benchmarks
             datas_cart, valores_cart = preparar_dados.simular_evolucao_diaria(
                 retornos_hist, pesos_ordenados, valor_inicial=100
             )
             
-            # --- CORREÇÃO DE NAN ---
-            # O JSON não aceita NaN. Temos que converter para None (null) ou 0.
-            # Aqui vamos converter NaN para None (null no JS), o Chart.js sabe lidar com null.
-            valores_limpos = [
-                None if pd.isna(x) or np.isnan(x) else x 
-                for x in valores_cart
-            ]
-            
+            # Limpeza de NaN para JSON
+            valores_limpos = [None if pd.isna(x) else x for x in valores_cart]
             return datas_cart, valores_limpos
 
         # --- A. DADOS GA ---
@@ -177,7 +160,8 @@ def processar_otimizacao():
                 'datas': datas_ga,
                 'carteira': valores_ga,
                 'cdi': bench_cdi,
-                'ibov': bench_ibov
+                'ibov': bench_ibov,
+                'sp500': bench_sp500 # <--- CAMPO NOVO
             }
         }
 
@@ -199,7 +183,8 @@ def processar_otimizacao():
                     'datas': datas_gu,
                     'carteira': valores_gu,
                     'cdi': bench_cdi,
-                    'ibov': bench_ibov
+                    'ibov': bench_ibov,
+                    'sp500': bench_sp500 # <--- CAMPO NOVO
                 }
             }
 
@@ -221,7 +206,8 @@ def processar_otimizacao():
                     'datas': datas_cold,
                     'carteira': valores_cold,
                     'cdi': bench_cdi,
-                    'ibov': bench_ibov
+                    'ibov': bench_ibov,
+                    'sp500': bench_sp500 # <--- CAMPO NOVO
                 }
             }
 
