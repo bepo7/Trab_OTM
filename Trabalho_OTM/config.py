@@ -11,7 +11,6 @@ ANOS_DE_DADOS = 5
 PESO_PVP = 0.005  # Ex: 0.5 penaliza ativos caros
 PESO_CVAR = 0.1
 PESO_PENALIZACAO_CAIXA = 5.0 # Penaliza fortemente deixar dinheiro parado
-PESO_SHARPE = 0.1 # Peso para maximização do Sharpe Ratio
 
 # --- 3. UNIVERSO TOTAL DE ATIVOS (NOMES HUMANIZADOS) ---
 UNIVERSO_ATIVOS = {

@@ -203,7 +203,6 @@ def resolver_com_gurobi_setores(inputs, lambda_risk, risco_max_usuario,
         var_final = np.dot(w_otimo, np.dot(cov_matrix, w_otimo))
         pvp_final = np.dot(w_otimo, vals_pvp)
         cvar_final = np.dot(w_otimo, vals_cvar)
-        sharpe_final = ret_final / (np.sqrt(var_final) + 1e-9)
         
         return {
             'pesos': w_otimo,
@@ -211,8 +210,7 @@ def resolver_com_gurobi_setores(inputs, lambda_risk, risco_max_usuario,
             'retorno': ret_final,
             'risco': np.sqrt(var_final),
             'pvp_final': pvp_final,
-            'cvar_final': cvar_final,
-            'sharpe': sharpe_final
+            'cvar_final': cvar_final
         }
     else:
         print(f"[GUROBI] Falha. Status: {model.Status}")

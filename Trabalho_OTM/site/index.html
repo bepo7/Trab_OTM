@@ -409,10 +409,6 @@
                         <div class="metric-label">CVaR</div>
                     </div>
                     <div class="metric">
-                        <div class="metric-value" id="sharpe_GA">0.00</div>
-                        <div class="metric-label">Sharpe</div>
-                    </div>
-                    <div class="metric">
                         <div class="metric-value" id="obj_GA">0.0000</div>
                         <div class="metric-label">Objetivo</div>
                     </div>
@@ -467,10 +463,6 @@
                         <div class="metric-label">CVaR</div>
                     </div>
                     <div class="metric">
-                        <div class="metric-value" id="sharpe_GU_WARM">0.00</div>
-                        <div class="metric-label">Sharpe</div>
-                    </div>
-                    <div class="metric">
                         <div class="metric-value" id="obj_GU_WARM">0.0000</div>
                         <div class="metric-label">Objetivo</div>
                     </div>
@@ -523,10 +515,6 @@
                     <div class="metric">
                         <div class="metric-value" id="cvar_GU_COLD">0%</div>
                         <div class="metric-label">CVaR</div>
-                    </div>
-                    <div class="metric">
-                        <div class="metric-value" id="sharpe_GU_COLD">0.00</div>
-                        <div class="metric-label">Sharpe</div>
                     </div>
                     <div class="metric">
                         <div class="metric-value" id="obj_GU_COLD">0.0000</div>
@@ -715,9 +703,6 @@
             }
             if (obj.metricas.cvar !== undefined) {
                 document.getElementById(`cvar_${suffix}`).innerText = obj.metricas.cvar.toFixed(2) + '%';
-            }
-            if (obj.metricas.sharpe !== undefined) {
-                document.getElementById(`sharpe_${suffix}`).innerText = obj.metricas.sharpe.toFixed(2);
             }
 
             if (obj.metricas.score) document.getElementById(`obj_${suffix}`).innerText = obj.metricas.score.toFixed(5);
