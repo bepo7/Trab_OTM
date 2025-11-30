@@ -8,6 +8,12 @@ import os
 
 # --- FUNÇÃO 1: PIZZA (MANTIDA IGUAL) ---
 def plot_pizza_por_ativos(serie_pesos, risco, retorno, valor_investido, nome_arquivo, titulo_personalizado):
+    # 1. Verifica sobra de caixa
+    soma_pesos = serie_pesos.sum()
+    if soma_pesos < 0.999:
+        sobra = 1.0 - soma_pesos
+        serie_pesos["Caixa / Não Investido"] = sobra
+
     # Filtra pesos irrelevantes
     pesos_relevantes = serie_pesos[serie_pesos > 0.0001]
     final_series = pesos_relevantes.sort_values(ascending=False)
@@ -19,8 +25,24 @@ def plot_pizza_por_ativos(serie_pesos, risco, retorno, valor_investido, nome_arq
     sizes = list(final_series.values)
 
     fig, ax = plt.subplots(figsize=(10, 8))
+    
+    # Cores: Gera mapa espectral para ativos, e Cinza para Caixa
     cmap = plt.get_cmap("nipy_spectral")
-    colors = cmap(np.linspace(0.05, 0.95, len(labels)))
+    colors = []
+    num_ativos = len(labels)
+    
+    # Se tiver caixa, ele entra na conta das cores, mas forçamos cinza
+    idx_cor = 0
+    total_ativos_reais = len([l for l in labels if l != "Caixa / Não Investido"])
+    
+    for label in labels:
+        if label == "Caixa / Não Investido":
+            colors.append("#D3D3D3") # Cinza claro
+        else:
+            # Distribui as cores espectrais apenas entre os ativos reais
+            ratio = idx_cor / max(1, total_ativos_reais - 1)
+            colors.append(cmap(0.05 + 0.9 * ratio))
+            idx_cor += 1
 
     def autopct_func(pct):
         return f"{pct:.1f}%" if pct >= 1.5 else ""

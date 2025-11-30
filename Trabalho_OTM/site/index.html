@@ -116,6 +116,15 @@
             <input type="number" id="riskCap" value="15">
         </div>
 
+        <div class="form-group">
+            <label>Teto Máximo por Ativo (%)</label>
+            <input type="number" id="maxAssetWeight" value="30" min="1" max="100">
+        </div>
+        <div class="form-group">
+            <label>Teto Máximo por Setor (%)</label>
+            <input type="number" id="maxSectorWeight" value="100" min="10" max="100" 
+                title="Quanto da carteira pode estar em um único setor?">
+        </div>
         <button class="btn" onclick="goToStep2()">Próximo: Setores →</button>
     </div>
 
@@ -224,11 +233,58 @@
 <script>
     // --- LÓGICA DE PRÉ-CARREGAMENTO ---
     document.addEventListener("DOMContentLoaded", function() {
-        fetch('/pre-carregar').then(res => res.json()).then(data => {
-            console.log("Pré-carregamento:", data);
-            verificarStatus();
-        }).catch(err => console.error("Erro pré-load", err));
+        // Dispara o download em background no Python
+        fetch('/pre-carregar')
+            .then(res => res.json())
+            .then(data => {
+                console.log("Pré-carregamento iniciado:", data);
+                // Inicia o monitoramento do status para esconder a barra quando acabar
+                verificarStatus();
+            })
+            .catch(err => console.error("Erro ao iniciar pré-load", err));
     });
+
+    // --- NOVA FUNÇÃO: Monitora o status e esconde a barra ---
+    function verificarStatus() {
+        const statusBar = document.getElementById('statusBar');
+        const statusText = document.getElementById('statusText');
+
+        // Cria um intervalo que roda a cada 1000ms (1 segundo)
+        const intervalo = setInterval(async () => {
+            try {
+                const response = await fetch('/status-dados');
+                const data = await response.json();
+                
+                // Atualiza o texto (ex: "Baixando Ativos..." ou "Aguardando...")
+                statusText.innerText = data.status;
+
+                // Se o Python disser que acabou:
+                if (data.status === "Dados Prontos") {
+                    
+                    // 1. Muda visualmente para indicar sucesso
+                    statusText.innerText = "Sistema Pronto!";
+                    
+                    // 2. Aguarda 1 segundo para o usuário ler, depois inicia o desaparecimento
+                    setTimeout(() => {
+                        statusBar.style.opacity = '0'; // Transparência via CSS
+                        
+                        // 3. Remove o elemento da tela após a animação (0.5s)
+                        setTimeout(() => {
+                            statusBar.style.display = 'none';
+                            clearInterval(intervalo); // Para de perguntar ao servidor
+                        }, 500);
+                    }, 1000);
+                } 
+                else if (data.status === "Erro" || data.status === "Erro no Download") {
+                    statusBar.style.color = "red";
+                    clearInterval(intervalo);
+                }
+
+            } catch (error) {
+                console.error("Erro ao verificar status:", error);
+            }
+        }, 1000);
+    }
 
     // --- FUNÇÕES DE UI ---
     function showStep(id) {
@@ -252,7 +308,7 @@
         else btn.classList.add('active');
     }
 
-    // --- EXECUÇÃO ---
+    // --- EXECUÇÃO PRINCIPAL ---
     async function startOptimization() {
         const modoSetor = document.querySelector('input[name="sectorMode"]:checked').value;
         let proibidos = [];
@@ -270,6 +326,8 @@
                     valor: document.getElementById('valorTotal').value,
                     lambda: document.getElementById('lambdaFactor').value,
                     risco: document.getElementById('riskCap').value,
+                    teto_ativo: document.getElementById('maxAssetWeight').value,
+                    teto_setor: document.getElementById('maxSectorWeight').value,
                     proibidos: proibidos
                 })
             });
@@ -308,7 +366,7 @@
         document.getElementById(`ret_${suffix}`).innerText = obj.metricas.retorno_aa.toFixed(2) + '%';
         document.getElementById(`ris_${suffix}`).innerText = obj.metricas.risco_aa.toFixed(2) + '%';
         
-        // NOVOS DADOS (Agora seguros pois existem no HTML)
+        // Dados adicionais
         if (obj.metricas.pvp !== undefined) {
             document.getElementById(`pvp_${suffix}`).innerText = obj.metricas.pvp.toFixed(2);
         }

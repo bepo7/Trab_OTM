@@ -10,6 +10,7 @@ ANOS_DE_DADOS = 5
 # --- 2. PARÂMETROS DE OTIMIZAÇÃO ---
 PESO_PVP = 0.005  # Ex: 0.5 penaliza ativos caros
 PESO_CVAR = 0.1
+PESO_PENALIZACAO_CAIXA = 5.0 # Penaliza fortemente deixar dinheiro parado
 
 # --- 3. UNIVERSO TOTAL DE ATIVOS (NOMES HUMANIZADOS) ---
 UNIVERSO_ATIVOS = {

@@ -94,6 +94,14 @@ def formatar_dados_para_frontend(ticker_list, peso_array, valor_investido):
                 'peso': round(peso * 100, 2),
                 'valor': round(peso * valor_investido, 2)
             })
+    soma_pesos = np.sum(peso_array)
+    if soma_pesos < 0.999:
+            sobra_peso = 1.0 - soma_pesos
+            alocacao.append({
+                'ativo': '🟢 CAIXA / NÃO INVESTIDO',
+                'peso': round(sobra_peso * 100, 2),
+                'valor': round(sobra_peso * valor_investido, 2)
+            })
     return sorted(alocacao, key=lambda x: x['peso'], reverse=True)
 
 @app.route('/otimizar', methods=['POST'])
@@ -104,7 +112,10 @@ def processar_otimizacao():
         valor_investir = float(dados.get('valor') or 0)
         lambda_risco = float(dados.get('lambda') or 50.0)
         risco_teto = float(dados.get('risco') or 15) / 100.0
+        teto_ativo_input = float(dados.get('teto_ativo') or 30.0) / 100.0
+        teto_setor_input = float(dados.get('teto_setor') or 100.0) / 100.0
         setores_proibidos = dados.get('proibidos', [])
+        
 
         print(f"\n--- [POST /otimizar] Iniciando... ---")
         
@@ -127,7 +138,7 @@ def processar_otimizacao():
         # 2. GA
         print(">> Rodando GA...")
         start_ga = time.time()
-        res_ga = otimizar.rodar_otimização(inputs, risco_teto, lambda_risco, setores_proibidos)
+        res_ga = otimizar.rodar_otimização(inputs, risco_teto, lambda_risco, setores_proibidos, teto_maximo_ativo=teto_ativo_input, teto_maximo_setor=teto_setor_input)
         tempo_ga = time.time() - start_ga
         
         if res_ga is None: return jsonify({'sucesso': False, 'erro': 'GA não convergiu.'}), 400
@@ -137,7 +148,7 @@ def processar_otimizacao():
         start_gu_warm = time.time()
         res_gurobi_warm = otm_gurobi_setores.resolver_com_gurobi_setores(
             inputs, lambda_risco, risco_teto, 
-            warm_start_pesos=res_ga['pesos_finais'], setores_proibidos=setores_proibidos
+            warm_start_pesos=res_ga['pesos_finais'], setores_proibidos=setores_proibidos, teto_maximo_ativo=teto_ativo_input, teto_maximo_setor=teto_setor_input
         )
         tempo_gu_warm = time.time() - start_gu_warm
 
@@ -146,7 +157,7 @@ def processar_otimizacao():
         start_gu_cold = time.time()
         res_gurobi_cold = otm_gurobi_setores.resolver_com_gurobi_setores(
             inputs, lambda_risco, risco_teto, 
-            warm_start_pesos=None, setores_proibidos=setores_proibidos
+            warm_start_pesos=None, setores_proibidos=setores_proibidos, teto_maximo_ativo=teto_ativo_input, teto_maximo_setor=teto_setor_input
         )
         tempo_gu_cold = time.time() - start_gu_cold
 
