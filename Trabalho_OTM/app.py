@@ -138,7 +138,9 @@ def processar_otimizacao():
         # 2. GA
         print(">> Rodando GA...")
         start_ga = time.time()
-        res_ga = otimizar.rodar_otimização(inputs, risco_teto, lambda_risco, setores_proibidos, teto_maximo_ativo=teto_ativo_input, teto_maximo_setor=teto_setor_input)
+        res_ga = otimizar.rodar_otimização(inputs, risco_teto, lambda_risco, setores_proibidos, 
+                                           teto_maximo_ativo=teto_ativo_input, 
+                                           teto_maximo_setor=teto_setor_input)
         tempo_ga = time.time() - start_ga
         
         if res_ga is None: return jsonify({'sucesso': False, 'erro': 'GA não convergiu.'}), 400
@@ -211,7 +213,8 @@ def processar_otimizacao():
                 'tempo': safe_num(tempo_ga),
                 # AQUI ESTAVA O PROBLEMA: Faltava o safe_num
                 'pvp': safe_num(res_ga['metricas'].get('pvp_final')),
-                'cvar': safe_num(res_ga['metricas'].get('cvar_final', 0) * 100)
+                'cvar': safe_num(res_ga['metricas'].get('cvar_final', 0) * 100),
+                'sharpe': safe_num(res_ga['metricas'].get('sharpe'))
             },
             'alocacao': formatar_dados_para_frontend(nomes_ativos, pesos_ga_final, valor_investir),
             'grafico_url': url_for('static', filename=nome_ga) + f'?t={timestamp}',
@@ -231,7 +234,8 @@ def processar_otimizacao():
                     'tempo': safe_num(tempo_gu_warm),
                     # CORREÇÃO: Usar dados do GUROBI, não do GA
                     'pvp': safe_num(res_gurobi_warm.get('pvp_final')),
-                    'cvar': safe_num(res_gurobi_warm.get('cvar_final', 0) * 100)
+                    'cvar': safe_num(res_gurobi_warm.get('cvar_final', 0) * 100),
+                    'sharpe': safe_num(res_gurobi_warm.get('sharpe'))
                 },
                 'alocacao': formatar_dados_para_frontend(nomes_ativos, res_gurobi_warm['pesos'], valor_investir),
                 'grafico_url': url_for('static', filename=nome_gu_warm) + f'?t={timestamp}',
@@ -251,7 +255,8 @@ def processar_otimizacao():
                     'tempo': safe_num(tempo_gu_cold),
                     # CORREÇÃO: Usar dados do GUROBI, não do GA
                     'pvp': safe_num(res_gurobi_cold.get('pvp_final')),
-                    'cvar': safe_num(res_gurobi_cold.get('cvar_final', 0) * 100)
+                    'cvar': safe_num(res_gurobi_cold.get('cvar_final', 0) * 100),
+                    'sharpe': safe_num(res_gurobi_cold.get('sharpe'))
                 },
                 'alocacao': formatar_dados_para_frontend(nomes_ativos, res_gurobi_cold['pesos'], valor_investir),
                 'grafico_url': url_for('static', filename=nome_gu_cold) + f'?t={timestamp}',

@@ -80,6 +80,7 @@ def resolver_com_gurobi_setores(inputs, lambda_risk, risco_max_usuario,
     model.setParam('OutputFlag', 0)
     
     pesos = []
+    binarias = []
     
     for i, ticker in enumerate(nomes_ativos):
         ticker_limpo = limpar_string(ticker)
@@ -95,20 +96,26 @@ def resolver_com_gurobi_setores(inputs, lambda_risk, risco_max_usuario,
         if ticker_limpo in ativos_proibidos_set:
             limite_ub = 0.0
             
-        # C. Variável
+        # C. Variável de Peso (Contínua)
         if limite_ub < MIN_PESO_ATIVO:
              p = model.addVar(lb=0.0, ub=0.0, vtype=GRB.CONTINUOUS)
+             z = model.addVar(lb=0.0, ub=0.0, vtype=GRB.BINARY) # Força 0
         else:
-            p = model.addVar(lb=MIN_PESO_ATIVO, ub=limite_ub, vtype=GRB.SEMICONT)
-            # Restrição EXTRA de segurança
-            model.addConstr(p <= limite_ub)
+            p = model.addVar(lb=0.0, ub=limite_ub, vtype=GRB.CONTINUOUS) # LB é 0 pois é controlado pelo Z
+            z = model.addVar(vtype=GRB.BINARY)
 
         # D. Warm Start
         if warm_start_pesos is not None:
              val = warm_start_pesos[i]
-             p.Start = min(val, limite_ub) if val > MIN_PESO_ATIVO else 0.0
+             if val > MIN_PESO_ATIVO:
+                 p.Start = min(val, limite_ub)
+                 z.Start = 1.0
+             else:
+                 p.Start = 0.0
+                 z.Start = 0.0
 
         pesos.append(p)
+        binarias.append(z)
         
     model.update()
 
@@ -119,26 +126,57 @@ def resolver_com_gurobi_setores(inputs, lambda_risk, risco_max_usuario,
     expr_cvar = gp.quicksum(pesos[i] * vals_cvar[i] for i in range(n_ativos))
     
     # Penalidade por Caixa (1.0 - soma_pesos)
-    # Como queremos MINIMIZAR, adicionamos: PESO * (1 - soma)
     expr_soma_pesos = gp.quicksum(pesos)
     expr_penalidade_caixa = config.PESO_PENALIZACAO_CAIXA * (1.0 - expr_soma_pesos)
 
+    # Objetivo: Mean-Variance com penalidades (sem Sharpe para manter convexidade)
     obj = (lambda_risk * expr_var) - expr_ret + (config.PESO_PVP * expr_pvp) + (config.PESO_CVAR * expr_cvar) + expr_penalidade_caixa
     model.setObjective(obj, GRB.MINIMIZE)
     
-    model.addConstr(gp.quicksum(pesos) <= 1.0, "Orcamento")
+    # Restrição de Orçamento: Soma(w) <= 1.0 (Permite caixa)
+    model.addConstr(gp.quicksum(pesos) <= 1.0, "orcamento")
     model.addConstr(expr_var <= risco_max_usuario ** 2, "Risco")
     
-    # Restrição de Soma de Setor
+    # Restrições de Setor
     if teto_maximo_setor < 0.999:
         for setor, idxs in indices_por_setor.items():
             if idxs:
                 model.addConstr(gp.quicksum(pesos[i] for i in idxs) <= teto_maximo_setor, f"TetoSetor_{setor}")
 
+    # Restrições de Cardinalidade / Peso Mínimo (Big-M formulation)
+    # Se z[i] = 0 => w[i] = 0
+    # Se z[i] = 1 => 0.005 <= w[i] <= teto_efetivo
+    LIMITE_MINIMO = 0.005
+    
+    for i in range(n_ativos):
+        ticker_limpo = limpar_string(nomes_ativos[i])
+        
+        # A. Liquidez
+        vol = safe_float(volume_medio.get(nomes_ativos[i], 0.0))
+        max_liq = safe_float((0.1 * vol) / valor_investido)
+        
+        # B. Limite Superior
+        # O limite é o MENOR entre: Teto Ativo, Teto Setor, Liquidez
+        limite_ub_i = min(teto_maximo_ativo, teto_maximo_setor, max_liq)
+        
+        if ticker_limpo in ativos_proibidos_set:
+            limite_ub_i = 0.0
+            
+        # Restrição Superior (Big-M): w[i] <= UB * z[i]
+        model.addConstr(pesos[i] <= limite_ub_i * binarias[i], f"upper_bound_bin_{i}")
+        
+        # Restrição Inferior (Threshold): w[i] >= 0.005 * z[i]
+        # Only apply if the upper bound allows for a non-zero weight
+        if limite_ub_i >= LIMITE_MINIMO:
+            model.addConstr(pesos[i] >= LIMITE_MINIMO * binarias[i], f"lower_bound_bin_{i}")
+        else: # If UB is too small, force w[i] to 0 and z[i] to 0
+            model.addConstr(pesos[i] == 0, f"force_zero_w_{i}")
+            model.addConstr(binarias[i] == 0, f"force_zero_z_{i}")
+
     model.optimize()
     
     if model.Status == GRB.OPTIMAL:
-        w_otimo = np.array([p.X for p in pesos])
+        w_otimo = np.array([pesos[i].X for i in range(n_ativos)])
         
         # --- PÓS-PROCESSAMENTO DE SEGURANÇA (O CORRETOR MANUAL) ---
         # Se o Gurobi falhar ou soltar algo errado, cortamos na marra.
@@ -165,6 +203,7 @@ def resolver_com_gurobi_setores(inputs, lambda_risk, risco_max_usuario,
         var_final = np.dot(w_otimo, np.dot(cov_matrix, w_otimo))
         pvp_final = np.dot(w_otimo, vals_pvp)
         cvar_final = np.dot(w_otimo, vals_cvar)
+        sharpe_final = ret_final / (np.sqrt(var_final) + 1e-9)
         
         return {
             'pesos': w_otimo,
@@ -172,7 +211,8 @@ def resolver_com_gurobi_setores(inputs, lambda_risk, risco_max_usuario,
             'retorno': ret_final,
             'risco': np.sqrt(var_final),
             'pvp_final': pvp_final,
-            'cvar_final': cvar_final
+            'cvar_final': cvar_final,
+            'sharpe': sharpe_final
         }
     else:
         print(f"[GUROBI] Falha. Status: {model.Status}")

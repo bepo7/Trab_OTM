@@ -174,6 +174,17 @@ def rodar_otimização(inputs, risco_maximo_usuario, lambda_aversao_risco,
         retorno_otimo = pesos_otimos.dot(retornos_medios)
         pvp_final = pesos_otimos.dot(vetor_pvp)
         cvar_final = pesos_otimos.dot(vetor_cvar)
+        sharpe_final = retorno_otimo / (risco_otimo + 1e-9)
+        
+        # Recalcula a função objetivo PADRÃO (sem Sharpe) para comparação justa com Gurobi
+        # O GA usa Sharpe internamente para busca, mas reporta a métrica padrão Mean-Variance
+        
+        penalidade_caixa = config.PESO_PENALIZACAO_CAIXA * max(0.0, 1.0 - pesos_otimos.sum())
+        
+        utility_score_reporting = (lambda_aversao_risco * (risco_otimo ** 2)) - retorno_otimo \
+                                  + (config.PESO_PVP * pvp_final) \
+                                  + (config.PESO_CVAR * cvar_final) \
+                                  + penalidade_caixa
         
         # DataFrame para CSV/Logs
         df_pesos = pd.DataFrame([pesos_otimos], columns=nomes_dos_ativos)
@@ -190,13 +201,14 @@ def rodar_otimização(inputs, risco_maximo_usuario, lambda_aversao_risco,
         
         return {
             "metricas": {
-                "valor_investido": valor_investido,
-                "retorno_esperado": retorno_otimo,
-                "risco_esperado": risco_otimo,
-                "funcao_objetivo": utility_score,
+                "retorno_aa": retorno_otimo * 100,
+                "risco_aa": risco_otimo * 100,
+                "score": utility_score_reporting, # Métrica Padronizada
+                "funcao_objetivo": utility_score, # Métrica Interna (com Sharpe)
                 "lambda_risco": lambda_aversao_risco,
                 "pvp_final": pvp_final,   
-                "cvar_final": cvar_final
+                "cvar_final": cvar_final,
+                "sharpe": sharpe_final
             },
             "dataframe_resultado": df_final,
             "nome_arquivo_csv": nome_arq,
