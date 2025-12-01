@@ -141,12 +141,18 @@ def baixar_dados_com_volume(lista_de_tickers, data_inicio, data_fim):
         if len(lista_de_tickers) == 1:
             if isinstance(precos, pd.Series): precos = precos.to_frame(lista_de_tickers[0])
             if isinstance(volumes, pd.Series): volumes = volumes.to_frame(lista_de_tickers[0])
-
-        precos = precos.dropna(axis=1, how='all').ffill().bfill()
+        
+        precos = precos.dropna(axis=1, how='all')
+        precos = precos.ffill().bfill()
+        
         volumes = volumes.dropna(axis=1, how='all').fillna(0)
         ativos_comuns = precos.columns.intersection(volumes.columns)
+
+        print(f"✅ Dados baixados. Ativos válidos: {len(ativos_comuns)}")
         return precos[ativos_comuns], volumes[ativos_comuns]
-    except: return None, None
+    except Exception as e: 
+        print(f"❌ Erro no download: {e}")
+        return None, None
 
 def simular_evolucao_diaria(retornos_hist, pesos, valor_inicial=100):
     pesos_series = pd.Series(pesos, index=retornos_hist.columns)
@@ -218,16 +224,27 @@ def calcular_inputs_otimizacao(valor_total_investido):
     
     vetor_cvar = calcular_cvar_95(ret_validos)
     vetor_pvp = obter_pvp_ativos_otimizado(ativos_validos)
+
+    ultimos_precos = precos[ativos_validos].ffill().iloc[-1].fillna(0.0)
     
-    # 6. BAIXAR E ALINHAR BENCHMARKS
+    try:
+        df_debug = pd.DataFrame({
+            'Ativo': ultimos_precos.index,
+            'Preco_Atual_R$': ultimos_precos.values
+        })
+        df_debug.to_csv("Trabalho_OTM/debug_precos_baixados.csv", index=False, sep=';', decimal=',')
+        print(f"📄 [DEBUG] Preços atuais salvos em 'debug_precos_baixados.csv'")
+    except Exception as e:
+        print(f"⚠️ Erro ao salvar CSV de debug: {e}")
+    
+    #ret_validos = retornos_diarios[ativos_validos] 
+    vetor_cvar = calcular_cvar_95(ret_validos)
+    vetor_pvp = obter_pvp_ativos_otimizado(ativos_validos)
+    
     inicio_real = ret_validos.index[0].strftime('%Y-%m-%d')
     df_benchmarks = baixar_benchmarks(inicio_real, data_fim.strftime('%Y-%m-%d'))
-    
-    # ALINHAMENTO CRITICO: Usa reindex do PANDAS para forçar as mesmas datas
-    # O .bfill() preenche buracos no inicio para evitar NaN (que vira zero no grafico)
     df_benchmarks = df_benchmarks.reindex(ret_validos.index).ffill().bfill()
-    
-    # Garante normalização base 1.0
+
     if not df_benchmarks.empty:
         df_benchmarks = df_benchmarks / df_benchmarks.iloc[0]
 
@@ -245,6 +262,7 @@ def calcular_inputs_otimizacao(valor_total_investido):
         'vetor_pvp': vetor_pvp.reindex(ativos_validos).fillna(1.0),
         'vetor_cvar': vetor_cvar.reindex(ativos_validos).fillna(0.05),
         'volume_medio': volume_financeiro.reindex(ativos_validos).fillna(0),
+        'ultimos_precos': ultimos_precos,
         'nomes_dos_ativos': ativos_validos,
         'n_ativos': len(ativos_validos),
         'retornos_diarios_historicos': ret_validos, 

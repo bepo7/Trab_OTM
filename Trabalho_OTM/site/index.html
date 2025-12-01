@@ -84,6 +84,13 @@
             color: var(--subtitle-color);
         }
 
+        /* GRID PARA INPUTS (Para caber os novos campos) */
+        .form-grid-inputs {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
         input[type="number"],
         select {
             width: 100%;
@@ -236,6 +243,36 @@
             border: 1px solid #e0e0e0;
         }
 
+        /* CABEÇALHOS DAS TABELAS COM CONTADOR */
+        .card-header-flex {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 10px;
+        }
+
+        .card-header-flex h3 {
+            margin: 0;
+            color: var(--subtitle-color);
+            font-size: 1.2em;
+        }
+
+        .count-badge {
+            background-color: #e0e0e0;
+            color: #333;
+            padding: 5px 10px;
+            border-radius: 15px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        /* Cores Badge */
+        .count-badge.ga-theme { background-color: rgba(31, 93, 34, 0.1); color: var(--primary-color); }
+        .count-badge.warm-theme { background-color: rgba(0, 86, 179, 0.1); color: var(--gurobi-warm-color); }
+        .count-badge.cold-theme { background-color: rgba(106, 27, 154, 0.1); color: var(--gurobi-cold-color); }
+
         .plot-placeholder img {
             width: 100%;
             height: auto;
@@ -249,7 +286,7 @@
         }
 
         .table-card {
-            height: 500px;
+            height: 450px; /* Mesma altura para ambas as tabelas */
             display: flex;
             flex-direction: column;
         }
@@ -259,25 +296,58 @@
             overflow-y: auto;
         }
 
+        /* AJUSTE DAS TABELAS PARA FICAREM IGUAIS */
         table {
             width: 100%;
             border-collapse: separate;
             border-spacing: 0;
+            table-layout: fixed; /* Força larguras fixas */
         }
 
-        th,
-        td {
-            text-align: left;
-            padding: 12px;
-            border-bottom: 1px solid #ddd;
+        /* DEFINIÇÃO DE LARGURA DE COLUNAS */
+        .gurobi-table th:nth-child(1), .gurobi-table td:nth-child(1) { width: 30%; }
+        .gurobi-table th:nth-child(2), .gurobi-table td:nth-child(2) { width: 30%; }
+        .gurobi-table th:nth-child(3), .gurobi-table td:nth-child(3) { width: 20%; }
+        .gurobi-table th:nth-child(4), .gurobi-table td:nth-child(4) { width: 20%; }
+
+        /* LARGURAS ESPECÍFICAS PARA GA (3 COLUNAS: Nome, Peso, Valor) */
+        .ga-table th:nth-child(1), .ga-table td:nth-child(1) { width: 40%; }
+        .ga-table th:nth-child(2), .ga-table td:nth-child(2) { width: 30%; }
+        .ga-table th:nth-child(3), .ga-table td:nth-child(3) { width: 30%; }
+        .ga-table th:nth-child(4), .ga-table td:nth-child(4) { display: none; }
+
+        th { 
+            position: sticky; top: 0; 
+            background-color: #0b370e; 
+            color: white; 
+            padding: 12px; 
+            font-size: 0.95rem; 
+            z-index: 10; 
+            /* Mantém o título alinhado à esquerda */
+            text-align: left; 
+        }
+        
+        td { 
+            /* Remove o 'text-align: left' padrão aqui para que a regra de alinhamento à direita funcione */
+            padding: 12px; 
+            border-bottom: 1px solid #ddd; 
+            font-size: 0.95rem; 
+            color: #333; 
+        }
+        
+        /* 2. Força Alinhamento à Direita nos Cabeçalhos */
+        .gurobi-table th:nth-child(2), .gurobi-table th:nth-child(3), .gurobi-table th:nth-child(4), 
+        .ga-table th:nth-child(2), .ga-table th:nth-child(3) {
+            text-align: right !important;
         }
 
-        th {
-            position: sticky;
-            top: 0;
-            background-color: var(--subtitle-color);
-            color: white;
+        /* 3. Força Alinhamento à Direita no Corpo da Tabela */
+        .gurobi-table td:nth-child(2), .gurobi-table td:nth-child(3), .gurobi-table td:nth-child(4),
+        .ga-table td:nth-child(2), .ga-table td:nth-child(3) {
+            text-align: right !important;
         }
+
+        tr:last-child td { border-bottom: none; }
 
         .gu-warm-table th {
             background-color: var(--gurobi-warm-color);
@@ -331,23 +401,40 @@
                 <label>Valor Total (R$)</label>
                 <input type="number" id="valorTotal" value="10000">
             </div>
-            <div class="form-group">
-                <label>Aversão ao Risco (Lambda)</label>
-                <input type="number" id="lambdaFactor" value="50.0" step="0.1">
+            
+            <div class="form-grid-inputs">
+                <div class="form-group">
+                    <label>Aversão ao Risco (Lambda)</label>
+                    <input type="number" id="lambdaFactor" value="20.0" step="0.1">
+                </div>
+                <div class="form-group">
+                    <label>Volatilidade Máxima (%)</label>
+                    <input type="number" id="riskCap" value="15">
+                </div>
             </div>
-            <div class="form-group">
-                <label>Volatilidade Máxima (%)</label>
-                <input type="number" id="riskCap" value="15">
+
+            <div class="form-grid-inputs">
+                <div class="form-group">
+                    <label>Teto Máximo por Ativo (%)</label>
+                    <input type="number" id="maxAssetWeight" value="30" min="1" max="100">
+                </div>
+                <div class="form-group">
+                    <label>Teto Máximo por Setor (%)</label>
+                    <input type="number" id="maxSectorWeight" value="100" min="10" max="100">
+                </div>
             </div>
-            <div class="form-group">
-                <label>Teto Máximo por Ativo (%)</label>
-                <input type="number" id="maxAssetWeight" value="30" min="1" max="100">
+
+            <div class="form-grid-inputs">
+                <div class="form-group">
+                    <label>Máxima Quantidade de Ativos (Global)</label>
+                    <input type="number" id="maxTotalAssets" value="30" min="1" step="1">
+                </div>
+                <div class="form-group">
+                    <label>Máxima Quantidade de Ativos (Por Setor)</label>
+                    <input type="number" id="maxSectorAssets" value="8" min="1" step="1">
+                </div>
             </div>
-            <div class="form-group">
-                <label>Teto Máximo por Setor (%)</label>
-                <input type="number" id="maxSectorWeight" value="100" min="10" max="100"
-                    title="Quanto da carteira pode estar em um único setor?">
-            </div>
+
             <button class="btn" onclick="goToStep2()">Próximo: Setores →</button>
         </div>
 
@@ -410,7 +497,7 @@
                     </div>
                     <div class="metric">
                         <div class="metric-value" id="obj_GA">0.0000</div>
-                        <div class="metric-label">Objetivo</div>
+                        <div class="metric-label">Função Objetivo</div>
                     </div>
                     <div class="metric">
                         <div class="metric-value" id="time_GA">0.00s</div>
@@ -421,21 +508,48 @@
                     <div class="result-base-card chart-card">
                         <div class="plot-placeholder" id="plot_GA"></div>
                     </div>
+                    
                     <div class="result-base-card table-card">
+                        <div class="card-header-flex">
+                            <h3>Alocação por Setor</h3>
+                            <span class="count-badge ga-theme"><span id="qtd_setores_GA">0</span> Setores</span>
+                        </div>
                         <div class="table-scroll-area">
-                            <table id="table_GA">
+                            <table id="table_sector_GA">
                                 <thead>
                                     <tr>
-                                        <th>Ativo</th>
-                                        <th>Peso</th>
-                                        <th>Valor</th>
+                                        <th>Setor</th>
+                                        <th>Peso (%)</th>
+                                        <th>Valor (R$)</th>
                                     </tr>
                                 </thead>
                                 <tbody></tbody>
                             </table>
                         </div>
                     </div>
-                    <div class="result-base-card line-chart-container"><canvas id="chart_line_GA"></canvas></div>
+
+                    <div class="result-base-card table-card">
+                        <div class="card-header-flex">
+                            <h3>Detalhamento da Carteira</h3>
+                            <span class="count-badge ga-theme"><span id="qtd_ativos_GA">0</span> Ativos</span>
+                        </div>
+                        <div class="table-scroll-area">
+                            <table id="table_GA">
+                                <thead>
+                                    <tr>
+                                        <th>Ativo</th>
+                                        <th>Peso (%)</th>
+                                        <th>Valor (R$)</th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
+                    
+                    <div class="result-base-card line-chart-container">
+                        <canvas id="chart_line_GA"></canvas>
+                    </div>
                 </div>
             </div>
 
@@ -464,7 +578,7 @@
                     </div>
                     <div class="metric">
                         <div class="metric-value" id="obj_GU_WARM">0.0000</div>
-                        <div class="metric-label">Objetivo</div>
+                        <div class="metric-label">Função Objetivo</div>
                     </div>
                     <div class="metric">
                         <div class="metric-value" id="time_GU_WARM">0.00s</div>
@@ -475,21 +589,50 @@
                     <div class="result-base-card chart-card">
                         <div class="plot-placeholder" id="plot_GU_WARM"></div>
                     </div>
+                    
                     <div class="result-base-card table-card">
+                        <div class="card-header-flex">
+                            <h3>Alocação por Setor</h3>
+                            <span class="count-badge warm-theme"><span id="qtd_setores_GU_WARM">0</span> Setores</span>
+                        </div>
                         <div class="table-scroll-area">
-                            <table id="table_GU_WARM" class="gu-warm-table">
+                            <table id="table_sector_GU_WARM" class="gu-warm-table">
                                 <thead>
                                     <tr>
-                                        <th>Ativo</th>
-                                        <th>Peso</th>
-                                        <th>Valor</th>
+                                        <th>Setor</th>
+                                        <th>Cotas</th>
+                                        <th>Peso (%)</th>
+                                        <th>Valor (R$)</th>
                                     </tr>
                                 </thead>
                                 <tbody></tbody>
                             </table>
                         </div>
                     </div>
-                    <div class="result-base-card line-chart-container"><canvas id="chart_line_GU_WARM"></canvas></div>
+
+                    <div class="result-base-card table-card">
+                        <div class="card-header-flex">
+                            <h3>Detalhamento da Carteira</h3>
+                            <span class="count-badge warm-theme"><span id="qtd_ativos_GU_WARM">0</span> Ativos</span>
+                        </div>
+                        <div class="table-scroll-area">
+                            <table id="table_GU_WARM" class="gu-warm-table">
+                                <thead>
+                                    <tr>
+                                        <th>Ativo</th>
+                                        <th>Cotas</th>
+                                        <th>Peso (%)</th>
+                                        <th>Valor (R$)</th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
+                    
+                    <div class="result-base-card line-chart-container">
+                        <canvas id="chart_line_GU_WARM"></canvas>
+                    </div>
                 </div>
             </div>
 
@@ -518,7 +661,7 @@
                     </div>
                     <div class="metric">
                         <div class="metric-value" id="obj_GU_COLD">0.0000</div>
-                        <div class="metric-label">Objetivo</div>
+                        <div class="metric-label">Função Objetivo</div>
                     </div>
                     <div class="metric">
                         <div class="metric-value" id="time_GU_COLD">0.00s</div>
@@ -529,21 +672,50 @@
                     <div class="result-base-card chart-card">
                         <div class="plot-placeholder" id="plot_GU_COLD"></div>
                     </div>
+                    
                     <div class="result-base-card table-card">
+                        <div class="card-header-flex">
+                            <h3>Alocação por Setor</h3>
+                            <span class="count-badge cold-theme"><span id="qtd_setores_GU_COLD">0</span> Setores</span>
+                        </div>
                         <div class="table-scroll-area">
-                            <table id="table_GU_COLD" class="gu-cold-table">
+                            <table id="table_sector_GU_COLD" class="gu-cold-table">
                                 <thead>
                                     <tr>
-                                        <th>Ativo</th>
-                                        <th>Peso</th>
-                                        <th>Valor</th>
+                                        <th>Setor</th>
+                                        <th>Cotas</th>
+                                        <th>Peso (%)</th>
+                                        <th>Valor (R$)</th>
                                     </tr>
                                 </thead>
                                 <tbody></tbody>
                             </table>
                         </div>
                     </div>
-                    <div class="result-base-card line-chart-container"><canvas id="chart_line_GU_COLD"></canvas></div>
+
+                    <div class="result-base-card table-card">
+                        <div class="card-header-flex">
+                            <h3>Detalhamento da Carteira</h3>
+                            <span class="count-badge cold-theme"><span id="qtd_ativos_GU_COLD">0</span> Ativos</span>
+                        </div>
+                        <div class="table-scroll-area">
+                            <table id="table_GU_COLD" class="gu-cold-table">
+                                <thead>
+                                    <tr>
+                                        <th>Ativo</th>
+                                        <th>Cotas</th>
+                                        <th>Peso (%)</th>
+                                        <th>Valor (R$)</th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
+                    
+                    <div class="result-base-card line-chart-container">
+                        <canvas id="chart_line_GU_COLD"></canvas>
+                    </div>
                 </div>
             </div>
 
@@ -562,47 +734,39 @@
     </div>
 
     <script>
+        // --- VARIÁVEIS GLOBAIS ---
+        let paretoChartInstance = null;
+        const chartInstances = { GA: null, GU_WARM: null, GU_COLD: null };
+
         // --- LÓGICA DE PRÉ-CARREGAMENTO ---
         document.addEventListener("DOMContentLoaded", function () {
-            // Dispara o download em background no Python
             fetch('/pre-carregar')
                 .then(res => res.json())
                 .then(data => {
                     console.log("Pré-carregamento iniciado:", data);
-                    // Inicia o monitoramento do status para esconder a barra quando acabar
                     verificarStatus();
                 })
                 .catch(err => console.error("Erro ao iniciar pré-load", err));
         });
 
-        // --- NOVA FUNÇÃO: Monitora o status e esconde a barra ---
         function verificarStatus() {
             const statusBar = document.getElementById('statusBar');
             const statusText = document.getElementById('statusText');
 
-            // Cria um intervalo que roda a cada 1000ms (1 segundo)
             const intervalo = setInterval(async () => {
                 try {
                     const response = await fetch('/status-dados');
                     const data = await response.json();
 
-                    // Atualiza o texto (ex: "Baixando Ativos..." ou "Aguardando...")
                     statusText.innerText = data.status;
 
-                    // Se o Python disser que acabou:
                     if (data.status === "Dados Prontos") {
-
-                        // 1. Muda visualmente para indicar sucesso
                         statusText.innerText = "Sistema Pronto!";
-
-                        // 2. Aguarda 1 segundo para o usuário ler, depois inicia o desaparecimento
                         setTimeout(() => {
-                            statusBar.style.opacity = '0'; // Transparência via CSS
-
-                            // 3. Remove o elemento da tela após a animação (0.5s)
+                            statusBar.style.opacity = '0';
                             setTimeout(() => {
                                 statusBar.style.display = 'none';
-                                clearInterval(intervalo); // Para de perguntar ao servidor
+                                clearInterval(intervalo);
                             }, 500);
                         }, 1000);
                     }
@@ -646,6 +810,10 @@
             if (modoSetor === 'custom') {
                 document.querySelectorAll('#sectorList input[type="checkbox"]').forEach(cb => { if (!cb.checked) proibidos.push(cb.value); });
             }
+            
+            // PEGAR OS VALORES DOS NOVOS INPUTS
+            const maxGlobal = document.getElementById('maxTotalAssets').value;
+            const maxSector = document.getElementById('maxSectorAssets').value;
 
             showStep('loading');
 
@@ -659,7 +827,10 @@
                         risco: document.getElementById('riskCap').value,
                         teto_ativo: document.getElementById('maxAssetWeight').value,
                         teto_setor: document.getElementById('maxSectorWeight').value,
-                        proibidos: proibidos
+                        proibidos: proibidos,
+                        // ENVIA OS NOVOS PARAMETROS PARA O PYTHON
+                        max_ativos: maxGlobal,
+                        max_ativos_setor: maxSector
                     })
                 });
                 const data = await response.json();
@@ -673,8 +844,6 @@
                 showStep('step2');
             }
         }
-
-        const chartInstances = { GA: null, GU_WARM: null, GU_COLD: null };
 
         function renderizarTudo(data) {
             fillData('GA', data.ga);
@@ -692,33 +861,65 @@
         }
 
         function fillData(suffix, obj) {
-            // Métricas básicas
+            // Métricas
             document.getElementById(`val_${suffix}`).innerText = Number(obj.metricas.valor_investido).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
             document.getElementById(`ret_${suffix}`).innerText = obj.metricas.retorno_aa.toFixed(2) + '%';
             document.getElementById(`ris_${suffix}`).innerText = obj.metricas.risco_aa.toFixed(2) + '%';
-
-            // Dados adicionais
-            if (obj.metricas.pvp !== undefined) {
-                document.getElementById(`pvp_${suffix}`).innerText = obj.metricas.pvp.toFixed(2);
-            }
-            if (obj.metricas.cvar !== undefined) {
-                document.getElementById(`cvar_${suffix}`).innerText = obj.metricas.cvar.toFixed(2) + '%';
-            }
-
+            if (obj.metricas.pvp !== undefined) document.getElementById(`pvp_${suffix}`).innerText = obj.metricas.pvp.toFixed(2);
+            if (obj.metricas.cvar !== undefined) document.getElementById(`cvar_${suffix}`).innerText = obj.metricas.cvar.toFixed(2) + '%';
             if (obj.metricas.score) document.getElementById(`obj_${suffix}`).innerText = obj.metricas.score.toFixed(5);
             if (obj.metricas.tempo !== undefined) document.getElementById(`time_${suffix}`).innerText = obj.metricas.tempo.toFixed(4) + 's';
+
+            // --- ATUALIZAR CONTADORES NO HEADER ---
+            if(document.getElementById(`qtd_ativos_${suffix}`)) {
+                document.getElementById(`qtd_ativos_${suffix}`).innerText = obj.metricas.qtd_ativos || 0;
+            }
+            if(document.getElementById(`qtd_setores_${suffix}`)) {
+                document.getElementById(`qtd_setores_${suffix}`).innerText = obj.metricas.qtd_setores || 0;
+            }
 
             // Pizza
             document.getElementById(`plot_${suffix}`).innerHTML = `<img src="${obj.grafico_url}" alt="Gráfico ${suffix}">`;
 
-            // Tabela
+            // --- TABELA DE SETORES (SEM NEGRITO NOS NÚMEROS) ---
+            // PREENCHIMENTO TABELA SETORES
+            const tbodySector = document.querySelector(`#table_sector_${suffix} tbody`);
+            if (tbodySector && obj.alocacao_setorial) {
+                tbodySector.innerHTML = '';
+                obj.alocacao_setorial.forEach(item => {
+                    // Começa a linha
+                    let linha = `<tr><td style="font-weight:600; color:#555;">${item.setor}</td>`;
+                    
+                    // --- MUDANÇA AQUI: Só adiciona QTD se NÃO for GA ---
+                    if (suffix !== 'GA') {
+                        linha += `<td>${item.qtd}</td>`;
+                    }
+                    // --------------------------------------------------
+                    
+                    linha += `<td>${item.peso.toFixed(2)}%</td>
+                              <td>${item.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td></tr>`;
+                    tbodySector.innerHTML += linha;
+                });
+            }
+
+            // PREENCHIMENTO TABELA ATIVOS (Mesma lógica)
             const tbody = document.querySelector(`#table_${suffix} tbody`);
             tbody.innerHTML = '';
             obj.alocacao.forEach(item => {
-                tbody.innerHTML += `<tr><td style="font-weight:bold">${item.ativo}</td><td>${item.peso.toFixed(2)}%</td><td>${item.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td></tr>`;
+                let linha = `<tr><td style="font-weight:600; color:#555;">${item.ativo}</td>`;
+                
+                // --- MUDANÇA AQUI ---
+                if (suffix !== 'GA') {
+                    linha += `<td>${item.qtd}</td>`;
+                }
+                // --------------------
+                
+                linha += `<td>${item.peso.toFixed(2)}%</td>
+                          <td>${item.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td></tr>`;
+                tbody.innerHTML += linha;
             });
 
-            // Gráfico JS
+            // Gráfico Histórico
             if (obj.backtest) {
                 renderizarGraficoBacktest(suffix, obj.backtest);
             }
@@ -738,92 +939,27 @@
             const fator = valorInvestido / 100.0;
             const safeMap = (arr) => arr ? arr.map(v => v * fator) : [];
 
-            const carteiraReais = safeMap(dataBacktest.carteira);
-            const cdiReais = safeMap(dataBacktest.cdi);
-            const ibovReais = safeMap(dataBacktest.ibov);
-            const sp500Reais = safeMap(dataBacktest.sp500);
-
             chartInstances[suffix] = new Chart(ctx, {
                 type: 'line',
                 data: {
                     labels: dataBacktest.datas,
                     datasets: [
-                        {
-                            label: 'Minha Carteira',
-                            data: carteiraReais,
-                            borderColor: colorLine,
-                            backgroundColor: colorFill,
-                            borderWidth: 2,
-                            pointRadius: 0,
-                            pointHoverRadius: 6,
-                            fill: true,
-                            tension: 0.1
-                        },
-                        {
-                            label: 'CDI',
-                            data: cdiReais,
-                            borderColor: '#333',
-                            borderWidth: 2,
-                            borderDash: [5, 5],
-                            pointRadius: 0,
-                            pointHoverRadius: 0,
-                            fill: false,
-                            tension: 0.1
-                        },
-                        {
-                            label: 'Ibovespa',
-                            data: ibovReais,
-                            borderColor: '#888',
-                            borderWidth: 1.5,
-                            pointRadius: 0,
-                            pointHoverRadius: 0,
-                            fill: false,
-                            tension: 0.1
-                        },
-                        {
-                            label: 'S&P 500 (BRL)',
-                            data: sp500Reais,
-                            borderColor: '#d32f2f',
-                            borderWidth: 1.5,
-                            pointRadius: 0,
-                            pointHoverRadius: 0,
-                            fill: false,
-                            tension: 0.1
-                        }
+                        { label: 'Minha Carteira', data: safeMap(dataBacktest.carteira), borderColor: colorLine, backgroundColor: colorFill, borderWidth: 2, pointRadius: 0, fill: true, tension: 0.1 },
+                        { label: 'CDI', data: safeMap(dataBacktest.cdi), borderColor: '#333', borderWidth: 2, borderDash: [5, 5], pointRadius: 0, fill: false, tension: 0.1 },
+                        { label: 'Ibovespa', data: safeMap(dataBacktest.ibov), borderColor: '#888', borderWidth: 1.5, pointRadius: 0, fill: false, tension: 0.1 },
+                        { label: 'S&P 500 (BRL)', data: safeMap(dataBacktest.sp500), borderColor: '#d32f2f', borderWidth: 1.5, pointRadius: 0, fill: false, tension: 0.1 }
                     ]
                 },
                 options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    interaction: { mode: 'index', intersect: false },
+                    responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
                     plugins: {
                         title: { display: true, text: 'Simulação de Patrimônio (Histórico)', font: { size: 16 } },
-                        tooltip: {
-                            enabled: true,
-                            callbacks: {
-                                label: function (context) {
-                                    let label = context.dataset.label || '';
-                                    if (label) label += ': ';
-                                    if (context.parsed.y !== null) {
-                                        label += new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(context.parsed.y);
-                                    }
-                                    return label;
-                                }
-                            }
-                        },
+                        tooltip: { callbacks: { label: function (c) { return (c.dataset.label || '') + ': ' + new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(c.parsed.y); } } },
                         legend: { position: 'top', labels: { usePointStyle: true, boxWidth: 8 } }
                     },
                     scales: {
                         x: { display: true, ticks: { maxTicksLimit: 8 } },
-                        y: {
-                            display: true,
-                            title: { display: true, text: 'Patrimônio (R$)' },
-                            ticks: {
-                                callback: function (value) {
-                                    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumSignificantDigits: 3 }).format(value);
-                                }
-                            }
-                        }
+                        y: { display: true, title: { display: true, text: 'Patrimônio (R$)' }, ticks: { callback: function (v) { return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumSignificantDigits: 3 }).format(v); } } }
                     }
                 }
             });
