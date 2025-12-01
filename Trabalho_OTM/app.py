@@ -70,6 +70,12 @@ def index():
     lista_setores = list(mapa_setores.keys())
     return render_template('index.html', setores=lista_setores)
 
+@app.route('/grafico_temporal_<tipo>.png')
+def serve_temporal_chart(tipo):
+    """Serve temporal analysis chart images"""
+    from flask import send_from_directory
+    return send_from_directory('site', f'grafico_temporal_{tipo}.png')
+
 # --- FUNÇÕES AUXILIARES ---
 
 def safe_num(val):
@@ -364,6 +370,289 @@ def processar_otimizacao():
     except Exception as e:
         traceback.print_exc()
         return jsonify({'sucesso': False, 'erro': str(e)}), 500
+
+@app.route('/otimizar-temporal', methods=['POST'])
+def processar_otimizacao_temporal():
+    """
+    Análise temporal: treina com 2021-2022, testa em 2023-2024, compara com carteira ótima 2021-2024
+    """
+    try:
+        dados = request.json
+        valor_investir = float(dados.get('valor') or 100000)
+        
+        lambda_risco = float(dados.get('lambda') or 50.0)
+        risco_teto = float(dados.get('risco') or 15) / 100.0
+        teto_ativo_input = float(dados.get('teto_ativo') or 30.0) / 100.0
+        teto_setor_input = float(dados.get('teto_setor') or 100.0) / 100.0
+        setores_proibidos = dados.get('proibidos', [])
+        
+        max_ativos_global = int(dados.get('max_ativos') or 15)
+        max_ativos_por_setor = int(dados.get('max_ativos_setor') or 4)
+        
+        print(f"\n{'='*80}")
+        print(f"ANÁLISE TEMPORAL DE CARTEIRA")
+        print(f"{'='*80}")
+        
+        # ========================================================================
+        # DOWNLOAD ÚNICO: Baixa dados de 2021-2024 uma vez só
+        # ========================================================================
+        print(f"\n[DOWNLOAD ÚNICO] Baixando dados de {config.DATA_INICIO_COMPLETO} a {config.DATA_FIM_COMPLETO}")
+        
+        inputs_completo = preparar_dados.calcular_inputs_otimizacao_periodo(
+            valor_investir,
+            config.DATA_INICIO_COMPLETO,
+            config.DATA_FIM_COMPLETO
+        )
+        
+        if inputs_completo is None:
+            return jsonify({'sucesso': False, 'erro': 'Falha ao baixar dados (2021-2024).'}), 500
+        
+        # ========================================================================
+        # FASE 1: TREINO COM DADOS 2021-2023 (reutilizando dados já baixados)
+        # ========================================================================
+        print(f"\n[FASE 1] Otimizando carteira com dados de {config.DATA_INICIO_TREINO} a {config.DATA_FIM_TREINO}")
+        
+        # Reutiliza os dados completos, filtrando para o período de treino
+        inputs_treino = preparar_dados.calcular_inputs_otimizacao_periodo(
+            valor_investir, 
+            config.DATA_INICIO_TREINO, 
+            config.DATA_FIM_TREINO
+        )
+        
+        if inputs_treino is None:
+            return jsonify({'sucesso': False, 'erro': 'Falha ao processar dados de treino (2021-2023).'}), 500
+        
+        nomes_ativos_treino = inputs_treino['nomes_dos_ativos']
+        precos_map_treino = inputs_treino.get('ultimos_precos', pd.Series()).to_dict()
+        
+        # Otimiza com Gurobi (usando dados de treino)
+        print("\n>> Otimizando com Gurobi (dados 2021-2022)...")
+        print(f"   Ativos: {len(nomes_ativos_treino)}, Setores proibidos: {setores_proibidos}")
+        print(f"   Parâmetros: max_ativos={max_ativos_global}, max_ativos_setor={max_ativos_por_setor}")
+        start_treino = time.time()
+        res_gurobi_treino = otm_gurobi_setores.resolver_com_gurobi_setores(
+            inputs_treino, lambda_risco, risco_teto,
+            warm_start_pesos=None, setores_proibidos=setores_proibidos,
+            teto_maximo_ativo=teto_ativo_input, teto_maximo_setor=teto_setor_input,
+            max_ativos_carteira=max_ativos_global,
+            max_ativos_setor=max_ativos_por_setor
+        )
+        tempo_treino = time.time() - start_treino
+        
+        if res_gurobi_treino is None:
+            return jsonify({'sucesso': False, 'erro': 'Otimização de treino falhou.'}), 400
+        
+        pesos_treino = res_gurobi_treino['pesos']
+        lotes_treino = res_gurobi_treino.get('lotes')
+        
+        # Métricas de treino
+        aloc_setor_treino = calcular_alocacao_setorial(nomes_ativos_treino, pesos_treino, valor_investir, precos_map_treino, lotes_treino)
+        n_ativos_treino, n_setores_treino = contar_ativos_setores(pesos_treino, aloc_setor_treino)
+        
+        metricas_treino = {
+            'periodo': f"{config.DATA_INICIO_TREINO} a {config.DATA_FIM_TREINO}",
+            'valor_investido': safe_num(valor_investir),
+            'retorno_aa': safe_num(res_gurobi_treino['retorno'] * 100),
+            'risco_aa': safe_num(res_gurobi_treino['risco'] * 100),
+            'score': safe_num(res_gurobi_treino['obj']),
+            'tempo': safe_num(tempo_treino),
+            'pvp': safe_num(res_gurobi_treino.get('pvp_final')),
+            'cvar': safe_num(res_gurobi_treino.get('cvar_final', 0) * 100),
+            'qtd_ativos': n_ativos_treino,
+            'qtd_setores': n_setores_treino
+        }
+        
+        alocacao_treino = formatar_dados_para_frontend(nomes_ativos_treino, pesos_treino, valor_investir, precos_map_treino, lotes_treino)
+        
+        if n_ativos_treino == 0:
+            return jsonify({'sucesso': False, 'erro': 'A otimização de treino resultou em uma carteira vazia (100% caixa). Tente reduzir a aversão ao risco ou aumentar a penalidade de caixa.'}), 400
+
+        # ========================================================================
+        # FASE 2: TESTE DA CARTEIRA DE TREINO EM 2023-2024
+        # ========================================================================
+        print(f"\n[FASE 2] Simulando performance da carteira 2021-2022 no período {config.DATA_INICIO_TESTE} a {config.DATA_FIM_TESTE}")
+        
+        performance_teste = preparar_dados.simular_performance_periodo(
+            pesos_treino,
+            nomes_ativos_treino,
+            config.DATA_INICIO_TESTE,
+            config.DATA_FIM_TESTE,
+            valor_inicial=valor_investir
+        )
+        
+        if performance_teste is None:
+            return jsonify({'sucesso': False, 'erro': 'Falha na simulação de performance 2023-2024 (nenhum ativo disponível).'}), 400
+        
+        metricas_teste = {
+            'periodo': f"{config.DATA_INICIO_TESTE} a {config.DATA_FIM_TESTE}",
+            'retorno_realizado_aa': safe_num(performance_teste['retorno_aa'] * 100),
+            'risco_realizado_aa': safe_num(performance_teste['risco_aa'] * 100),
+            'sharpe_realizado': safe_num(performance_teste['sharpe']),
+            'valor_final': safe_num(performance_teste['valor_final']),
+            'retorno_total': safe_num(performance_teste['retorno_total'] * 100)
+        }
+        
+        # ========================================================================
+        # FASE 3: CARTEIRA ÓTIMA COM DADOS COMPLETOS 2021-2024 (dados já baixados)
+        # ========================================================================
+        print(f"\n[FASE 3] Otimizando carteira com dados completos de {config.DATA_INICIO_COMPLETO} a {config.DATA_FIM_COMPLETO}")
+        
+        # Dados já foram baixados no início, apenas reutiliza
+        nomes_ativos_completo = inputs_completo['nomes_dos_ativos']
+        precos_map_completo = inputs_completo.get('ultimos_precos', pd.Series()).to_dict()
+        
+        # Otimiza com Gurobi (usando dados completos)
+        print("\n>> Otimizando com Gurobi (dados 2021-2024)...")
+        start_completo = time.time()
+        res_gurobi_completo = otm_gurobi_setores.resolver_com_gurobi_setores(
+            inputs_completo, lambda_risco, risco_teto,
+            warm_start_pesos=None, setores_proibidos=setores_proibidos,
+            teto_maximo_ativo=teto_ativo_input, teto_maximo_setor=teto_setor_input,
+            max_ativos_carteira=max_ativos_global,
+            max_ativos_setor=max_ativos_por_setor
+        )
+        tempo_completo = time.time() - start_completo
+        
+        if res_gurobi_completo is None:
+            return jsonify({'sucesso': False, 'erro': 'Otimização completa falhou.'}), 400
+        
+        pesos_completo = res_gurobi_completo['pesos']
+        lotes_completo = res_gurobi_completo.get('lotes')
+        
+        # Métricas completas
+        aloc_setor_completo = calcular_alocacao_setorial(nomes_ativos_completo, pesos_completo, valor_investir, precos_map_completo, lotes_completo)
+        n_ativos_completo, n_setores_completo = contar_ativos_setores(pesos_completo, aloc_setor_completo)
+        
+        metricas_completo = {
+            'periodo': f"{config.DATA_INICIO_COMPLETO} a {config.DATA_FIM_COMPLETO}",
+            'valor_investido': safe_num(valor_investir),
+            'retorno_aa': safe_num(res_gurobi_completo['retorno'] * 100),
+            'risco_aa': safe_num(res_gurobi_completo['risco'] * 100),
+            'score': safe_num(res_gurobi_completo['obj']),
+            'tempo': safe_num(tempo_completo),
+            'pvp': safe_num(res_gurobi_completo.get('pvp_final')),
+            'cvar': safe_num(res_gurobi_completo.get('cvar_final', 0) * 100),
+            'qtd_ativos': n_ativos_completo,
+            'qtd_setores': n_setores_completo
+        }
+        
+        alocacao_completo = formatar_dados_para_frontend(nomes_ativos_completo, pesos_completo, valor_investir, precos_map_completo, lotes_completo)
+        
+        # Simula performance da carteira ótima em 2023-2024 (para comparação justa)
+        print(f"\n>> Simulando performance da carteira ótima em 2023-2024...")
+        performance_otima_teste = preparar_dados.simular_performance_periodo(
+            pesos_completo,
+            nomes_ativos_completo,
+            config.DATA_INICIO_TESTE,
+            config.DATA_FIM_TESTE,
+            valor_inicial=valor_investir
+        )
+        
+        if performance_otima_teste:
+            metricas_otima_teste = {
+                'periodo': f"{config.DATA_INICIO_TESTE} a {config.DATA_FIM_TESTE}",
+                'retorno_realizado_aa': safe_num(performance_otima_teste['retorno_aa'] * 100),
+                'risco_realizado_aa': safe_num(performance_otima_teste['risco_aa'] * 100),
+                'sharpe_realizado': safe_num(performance_otima_teste['sharpe']),
+                'valor_final': safe_num(performance_otima_teste['valor_final']),
+                'retorno_total': safe_num(performance_otima_teste['retorno_total'] * 100)
+            }
+        else:
+            metricas_otima_teste = None
+        
+
+        # ========================================================================
+        # FASE 4: COMPARAÇÃO
+        # ========================================================================
+        print(f"\n[FASE 4] Comparando resultados...")
+        
+        # Diferenças entre carteira de treino vs carteira ótima
+        dif_retorno_treino = metricas_treino['retorno_aa'] - metricas_completo['retorno_aa']
+        dif_risco_treino = metricas_treino['risco_aa'] - metricas_completo['risco_aa']
+        dif_score_treino = metricas_treino['score'] - metricas_completo['score']
+        
+        # Análise da performance real (Comparando retornos REALIZADOS em 2024)
+        if metricas_otima_teste:
+            retorno_real_treino = metricas_teste['retorno_realizado_aa']
+            retorno_real_otima = metricas_otima_teste['retorno_realizado_aa']
+            dif_retorno_real = retorno_real_treino - retorno_real_otima
+            retorno_ref = retorno_real_otima
+            print(f"[DEBUG COMPARAÇÃO] Realizado Treino ({retorno_real_treino:.2f}%) - Realizado Ótima ({retorno_real_otima:.2f}%) = {dif_retorno_real:.2f}%")
+        else:
+            dif_retorno_real = metricas_teste['retorno_realizado_aa'] - metricas_completo['retorno_aa']
+            retorno_ref = metricas_completo['retorno_aa']
+            print(f"[DEBUG COMPARAÇÃO] Fallback: Realizado Treino - Esperado Ótima")
+        
+        comparacao = {
+            'diferenca_retorno_treino': safe_num(dif_retorno_treino),
+            'diferenca_risco_treino': safe_num(dif_risco_treino),
+            'diferenca_score_treino': safe_num(dif_score_treino),
+            'diferenca_retorno_real_vs_otimo': safe_num(dif_retorno_real),
+            'mensagem': f"A carteira treinada (2021-2023) teve retorno de {metricas_teste['retorno_realizado_aa']:.2f}% a.a. em 2024, contra {retorno_ref:.2f}% a.a. da carteira ótima simulada no mesmo período."
+        }
+        
+        print(f"\n{'='*80}")
+        print(f"RESULTADOS DA ANÁLISE TEMPORAL")
+        print(f"{'='*80}")
+        print(f"Carteira Treino (2021-2022): Retorno={metricas_treino['retorno_aa']:.2f}% | Risco={metricas_treino['risco_aa']:.2f}%")
+        print(f"Performance Real (2023-2024): Retorno={metricas_teste['retorno_realizado_aa']:.2f}% | Risco={metricas_teste['risco_realizado_aa']:.2f}%")
+        print(f"Carteira Ótima (2021-2024): Retorno={metricas_completo['retorno_aa']:.2f}% | Risco={metricas_completo['risco_aa']:.2f}%")
+        print(f"{'='*80}\n")
+        
+        # ========================================================================
+        # GERAR GRÁFICOS DE ALOCAÇÃO
+        # ========================================================================
+        print("\n>> Gerando gráficos de alocação...")
+        
+        # Gráfico da carteira de treino
+        path_grafico_treino = 'Trabalho_OTM/site/grafico_temporal_treino.png'
+        pesos_treino_series = pd.Series(pesos_treino, index=nomes_ativos_treino)
+        plot.plot_pizza_por_ativos(
+            serie_pesos=pesos_treino_series,
+            risco=res_gurobi_treino['risco'],
+            retorno=res_gurobi_treino['retorno'],
+            valor_investido=valor_investir,
+            nome_arquivo=path_grafico_treino,
+            titulo_personalizado="Carteira Treino (2021-2023)"
+        )
+        
+        # Gráfico da carteira ótima
+        path_grafico_otima = 'Trabalho_OTM/site/grafico_temporal_otima.png'
+        pesos_completo_series = pd.Series(pesos_completo, index=nomes_ativos_completo)
+        plot.plot_pizza_por_ativos(
+            serie_pesos=pesos_completo_series,
+            risco=res_gurobi_completo['risco'],
+            retorno=res_gurobi_completo['retorno'],
+            valor_investido=valor_investir,
+            nome_arquivo=path_grafico_otima,
+            titulo_personalizado="Carteira Ótima (2021-2024)"
+        )
+        
+        print("✅ Gráficos gerados com sucesso!")
+        
+        # Resposta final
+        return jsonify({
+            'sucesso': True,
+            'carteira_2021_2022': {
+                'metricas_treino': metricas_treino,
+                'alocacao': alocacao_treino,
+                'alocacao_setorial': aloc_setor_treino,
+                'performance_2023_2024': metricas_teste,
+                'evolucao_teste': performance_teste.get('evolucao', {})
+            },
+            'carteira_2021_2024': {
+                'metricas': metricas_completo,
+                'alocacao': alocacao_completo,
+                'alocacao_setorial': aloc_setor_completo,
+                'performance_2023_2024': metricas_otima_teste
+            },
+            'comparacao': comparacao
+        })
+        
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({'sucesso': False, 'erro': str(e)}), 500
+
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)

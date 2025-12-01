@@ -97,6 +97,12 @@ def baixar_benchmarks(data_inicio, data_fim_str):
 
         # Junta tudo
         if not cdi_acumulado.empty and not bench_normalizado.empty:
+            # Remove timezone de ambos antes de concatenar
+            if hasattr(cdi_acumulado.index, 'tz') and cdi_acumulado.index.tz is not None:
+                cdi_acumulado.index = cdi_acumulado.index.tz_localize(None)
+            if hasattr(bench_normalizado.index, 'tz') and bench_normalizado.index.tz is not None:
+                bench_normalizado.index = bench_normalizado.index.tz_localize(None)
+            
             df_api = pd.concat([cdi_acumulado, bench_normalizado], axis=1).ffill().bfill()
             # Garante base 1.0
             df_api = df_api / df_api.iloc[0]
@@ -145,13 +151,79 @@ def baixar_dados_com_volume(lista_de_tickers, data_inicio, data_fim):
         precos = precos.dropna(axis=1, how='all')
         precos = precos.ffill().bfill()
         
+        # Remove timezone para evitar erros de join
+        if hasattr(precos.index, 'tz') and precos.index.tz is not None:
+            precos.index = precos.index.tz_localize(None)
+        
         volumes = volumes.dropna(axis=1, how='all').fillna(0)
+        
+        # Remove timezone dos volumes também
+        if hasattr(volumes.index, 'tz') and volumes.index.tz is not None:
+            volumes.index = volumes.index.tz_localize(None)
+        
         ativos_comuns = precos.columns.intersection(volumes.columns)
+
+        if len(ativos_comuns) == 0:
+            print("⚠️ Nenhum ativo válido após processamento")
+            return None, None
 
         print(f"✅ Dados baixados. Ativos válidos: {len(ativos_comuns)}")
         return precos[ativos_comuns], volumes[ativos_comuns]
+    except TypeError as e:
+        if "Cannot join tz-naive with tz-aware" in str(e):
+            print(f"⚠️ Erro de timezone no download em lote. Tentando download individual...")
+            # Fallback: baixa um por um e remove timezone
+            all_precos = []
+            all_volumes = []
+            for ticker in lista_de_tickers:
+                try:
+                    dados_individual = yf.download([ticker], start=data_inicio, end=data_fim_ajustada, progress=False, auto_adjust=True)
+                    if not dados_individual.empty:
+                        if 'Close' in dados_individual.columns:
+                            preco = dados_individual['Close']
+                        else:
+                            preco = dados_individual
+                        if 'Volume' in dados_individual.columns:
+                            volume = dados_individual['Volume']
+                        else:
+                            volume = pd.Series(np.nan, index=preco.index)
+                        
+                        # Remove timezone
+                        if hasattr(preco.index, 'tz') and preco.index.tz is not None:
+                            preco.index = preco.index.tz_localize(None)
+                        if hasattr(volume.index, 'tz') and volume.index.tz is not None:
+                            volume.index = volume.index.tz_localize(None)
+                        
+                        preco.name = ticker
+                        volume.name = ticker
+                        all_precos.append(preco)
+                        all_volumes.append(volume)
+                except:
+                    continue
+            
+            if all_precos:
+                precos = pd.concat(all_precos, axis=1).ffill().bfill()
+                volumes = pd.concat(all_volumes, axis=1).fillna(0)
+                print(f"✅ Dados baixados individualmente. Ativos válidos: {len(precos.columns)}")
+                return precos, volumes
+            else:
+                print("❌ Nenhum ativo baixado com sucesso")
+                return None, None
+        else:
+            import traceback
+            print(f"❌ Erro de tipo no download: {e}")
+            print(f"Traceback: {traceback.format_exc()}")
+            return None, None
+    except KeyError as e:
+        print(f"❌ Erro de chave no download: {e}")
+        return None, None
+    except ValueError as e:
+        print(f"❌ Erro de valor no download: {e}")
+        return None, None
     except Exception as e: 
-        print(f"❌ Erro no download: {e}")
+        import traceback
+        print(f"❌ Erro inesperado no download: {type(e).__name__}: {e}")
+        print(f"Traceback: {traceback.format_exc()}")
         return None, None
 
 def simular_evolucao_diaria(retornos_hist, pesos, valor_inicial=100):
@@ -162,19 +234,198 @@ def simular_evolucao_diaria(retornos_hist, pesos, valor_inicial=100):
     datas = [d.strftime('%Y-%m-%d') for d in acumulado.index]
     return datas, valores
 
+def simular_performance_periodo(pesos_carteira, nomes_ativos, data_inicio, data_fim, valor_inicial=100000):
+    """
+    Simula a performance de uma carteira em um período específico usando dados reais.
+    
+    Args:
+        pesos_carteira: Array ou Series com os pesos da carteira
+        nomes_ativos: Lista de nomes dos ativos
+        data_inicio: Data inicial da simulação (datetime.date ou string)
+        data_fim: Data final da simulação (datetime.date ou string)
+        valor_inicial: Valor inicial investido
+    
+    Returns:
+        Dicionário com métricas realizadas: retorno_aa, risco_aa, sharpe, valor_final, evolucao
+    """
+    # Converte strings para datetime.date se necessário
+    if isinstance(data_inicio, str):
+        data_inicio = datetime.datetime.strptime(data_inicio, '%Y-%m-%d').date()
+    if isinstance(data_fim, str):
+        data_fim = datetime.datetime.strptime(data_fim, '%Y-%m-%d').date()
+    
+    print(f"\n--- Simulando performance de {data_inicio} a {data_fim} ---")
+    
+    # Baixa dados do período
+    data_fim_ajustada = data_fim + datetime.timedelta(days=1)
+    try:
+        dados = yf.download(nomes_ativos, start=data_inicio, end=data_fim_ajustada, progress=False, auto_adjust=True)
+        if dados.empty:
+            print("⚠️ Sem dados para o período de simulação")
+            return None
+        
+        if 'Close' in dados.columns:
+            precos = dados['Close']
+        else:
+            precos = dados
+        
+        if len(nomes_ativos) == 1:
+            if isinstance(precos, pd.Series):
+                precos = precos.to_frame(nomes_ativos[0])
+        
+        precos = precos.dropna(axis=1, how='all').ffill().bfill()
+        
+        # Filtra explicitamente para garantir que apenas dados do período sejam usados
+        # IMPORTANTE: Filtrar ANTES de calcular retornos
+        precos = precos.loc[data_inicio:data_fim]
+        
+        if precos.empty:
+            print("⚠️ Sem dados após filtro de datas")
+            return None
+        
+        print(f"[DEBUG] Preços filtrados: {len(precos)} dias de {precos.index[0].strftime('%Y-%m-%d')} a {precos.index[-1].strftime('%Y-%m-%d')}")
+        
+        # Calcula retornos diários
+        retornos_diarios = precos.pct_change().replace([np.inf, -np.inf], np.nan).dropna()
+        
+        print(f"[DEBUG] Retornos calculados: {len(retornos_diarios)} dias úteis")
+        
+        if retornos_diarios.empty:
+            print("⚠️ Sem retornos válidos para simulação")
+            return None
+        
+        # Alinha pesos com os ativos disponíveis
+        if isinstance(pesos_carteira, pd.Series):
+            pesos_alinhados = pesos_carteira.reindex(retornos_diarios.columns).fillna(0.0)
+        else:
+            dict_pesos = dict(zip(nomes_ativos, pesos_carteira))
+            pesos_alinhados = pd.Series([dict_pesos.get(col, 0.0) for col in retornos_diarios.columns], 
+                                        index=retornos_diarios.columns)
+        
+        # Normaliza pesos (caso alguns ativos não existam no período)
+        soma_pesos = pesos_alinhados.sum()
+        valor_inicial_efetivo = valor_inicial  # Valor que realmente será investido
+        
+        if soma_pesos > 0:
+            pesos_alinhados = pesos_alinhados / soma_pesos
+        else:
+            print("⚠️ Nenhum ativo disponível no período de simulação")
+            return None
+        
+        # Calcula retorno diário da carteira
+        retorno_carteira_diario = (retornos_diarios * pesos_alinhados).sum(axis=1)
+        
+        # Calcula retorno total acumulado
+        retorno_acumulado = (1 + retorno_carteira_diario).prod() - 1
+        
+        # SIMPLIFICADO: Valor final = Capital inicial * (1 + Retorno total)
+        valor_final = valor_inicial_efetivo * (1 + retorno_acumulado)
+        retorno_total = retorno_acumulado
+        
+        # Cálculo de X (anos) para anualização correta
+        ano_inicio = pd.to_datetime(data_inicio).year
+        ano_fim = pd.to_datetime(data_fim).year
+        X = ano_fim - ano_inicio
+        if X == 0: X = 1  # Evita divisão por zero se for mesmo ano
+        
+        # Métricas anualizadas usando X (anos calendário) em vez de dias úteis
+        dias_uteis = len(retorno_carteira_diario)
+        anos = float(X) # Usa a diferença de anos calendário
+        
+        # Debug: mostra período real usado
+        data_inicio_real = retorno_carteira_diario.index[0].strftime('%Y-%m-%d')
+        data_fim_real = retorno_carteira_diario.index[-1].strftime('%Y-%m-%d')
+        print(f"[DEBUG SIMULAÇÃO] Período: {data_inicio_real} a {data_fim_real} ({dias_uteis} dias úteis)")
+        print(f"[DEBUG SIMULAÇÃO] X (Anos Calendário): {X} | Retorno Total: {retorno_total*100:.2f}%")
+        print(f"[DEBUG SIMULAÇÃO] Valor Inicial: R$ {valor_inicial_efetivo:.2f} | Valor Final: R$ {valor_final:.2f}")
+        
+        if anos > 0:
+            retorno_aa = (1 + retorno_total) ** (1 / anos) - 1
+        else:
+            retorno_aa = 0.0
+        
+        risco_aa = retorno_carteira_diario.std() * np.sqrt(DIAS_UTEIS_ANO)
+        
+        # Sharpe (assumindo CDI ~11% a.a. como taxa livre de risco)
+        taxa_livre_risco = 0.11
+        sharpe = (retorno_aa - taxa_livre_risco) / risco_aa if risco_aa > 0 else 0.0
+        
+        # Evolução para gráfico (recalcula para visualização)
+        evolucao = (1 + retorno_carteira_diario).cumprod() * valor_inicial_efetivo
+        datas_evolucao = [d.strftime('%Y-%m-%d') for d in evolucao.index]
+        valores_evolucao = evolucao.values.tolist()
+        
+        print(f"✅ Simulação concluída: Retorno={retorno_aa*100:.2f}% a.a., Risco={risco_aa*100:.2f}% a.a.")
+        
+        return {
+            'retorno_aa': retorno_aa,
+            'risco_aa': risco_aa,
+            'sharpe': sharpe,
+            'valor_final': valor_final,
+            'retorno_total': retorno_total,
+            'evolucao': {'datas': datas_evolucao, 'valores': valores_evolucao},
+            'periodo': {'inicio': data_inicio.strftime('%Y-%m-%d'), 'fim': data_fim.strftime('%Y-%m-%d')}
+        }
+        
+    except Exception as e:
+        print(f"❌ Erro na simulação: {e}")
+        return None
+
+
 def pegar_pvp_individual(ticker):
     try:
         t = yf.Ticker(ticker)
         val = t.info.get('priceToBook')
-        return ticker, (float(val) if val is not None and float(val) > 0 else 20.0)
+        return ticker, (float(val) if val is not None and float(val) > 0 else 2.0)
     except: return ticker, np.nan
 
 def obter_pvp_ativos_otimizado(lista_tickers):
+    """
+    Obtém P/VP dos ativos com cache em CSV.
+    Cache expira após 24 horas.
+    """
+    cache_file = 'pvp_cache.csv'
+    cache_max_age_hours = 24
+    
+    # Tenta carregar cache existente
     pvp_data = {}
-    with ThreadPoolExecutor(max_workers=20) as executor:
-        for ticker, valor in executor.map(pegar_pvp_individual, lista_tickers):
-            pvp_data[ticker] = valor
-    return pd.Series(pvp_data).fillna(1.0)
+    cache_valido = False
+    
+    if os.path.exists(cache_file):
+        try:
+            cache_df = pd.read_csv(cache_file, index_col=0)
+            # Verifica idade do cache
+            if 'timestamp' in cache_df.columns:
+                timestamp = pd.to_datetime(cache_df['timestamp'].iloc[0])
+                idade_horas = (datetime.datetime.now() - timestamp).total_seconds() / 3600
+                if idade_horas < cache_max_age_hours:
+                    cache_valido = True
+                    pvp_data = cache_df['pvp'].to_dict()
+                    print(f"✅ Cache P/VP carregado ({len(pvp_data)} ativos, {idade_horas:.1f}h atrás)")
+        except Exception as e:
+            print(f"⚠️ Erro ao carregar cache P/VP: {e}")
+    
+    # Identifica tickers que precisam ser baixados
+    tickers_faltantes = [t for t in lista_tickers if t not in pvp_data]
+    
+    if tickers_faltantes:
+        print(f"📥 Baixando P/VP para {len(tickers_faltantes)} ativos...")
+        with ThreadPoolExecutor(max_workers=20) as executor:
+            for ticker, valor in executor.map(pegar_pvp_individual, tickers_faltantes):
+                pvp_data[ticker] = valor
+        
+        # Salva cache atualizado
+        try:
+            cache_df = pd.DataFrame({
+                'pvp': pvp_data,
+                'timestamp': datetime.datetime.now()
+            })
+            cache_df.to_csv(cache_file)
+            print(f"💾 Cache P/VP salvo em '{cache_file}'")
+        except Exception as e:
+            print(f"⚠️ Erro ao salvar cache P/VP: {e}")
+    
+    return pd.Series(pvp_data).reindex(lista_tickers).fillna(1.0)
 
 def calcular_cvar_95(retornos):
     cvar_dict = {}
@@ -196,13 +447,29 @@ def limpar_dados(retornos_medios, matriz_cov, volumes_medios):
     volumes_medios = volumes_medios.reindex(retornos_medios.index).fillna(0)
     return retornos_medios, matriz_cov, volumes_medios
 
-# --- FUNÇÃO PRINCIPAL (ATUALIZADA) ---
-def calcular_inputs_otimizacao(valor_total_investido):
+# --- FUNÇÃO PRINCIPAL COM PERÍODO CUSTOMIZÁVEL ---
+def calcular_inputs_otimizacao_periodo(valor_total_investido, data_inicio, data_fim):
+    """
+    Calcula inputs de otimização para um período específico.
+    
+    Args:
+        valor_total_investido: Valor a ser investido
+        data_inicio: Data inicial (datetime.date ou string 'YYYY-MM-DD')
+        data_fim: Data final (datetime.date ou string 'YYYY-MM-DD')
+    
+    Returns:
+        Dicionário com inputs de otimização ou None se falhar
+    """
     lista_ativos = config.UNIVERSO_COMPLETO
     if not lista_ativos: return None
 
-    data_fim = datetime.date.today()
-    data_inicio = data_fim - datetime.timedelta(days=config.ANOS_DE_DADOS * 365.25)
+    # Converte strings para datetime.date se necessário
+    if isinstance(data_inicio, str):
+        data_inicio = datetime.datetime.strptime(data_inicio, '%Y-%m-%d').date()
+    if isinstance(data_fim, str):
+        data_fim = datetime.datetime.strptime(data_fim, '%Y-%m-%d').date()
+    
+    print(f"\n--- Baixando dados para período: {data_inicio} a {data_fim} ---")
     
     precos, volumes = baixar_dados_com_volume(lista_ativos, data_inicio, data_fim)
     if precos is None or precos.empty: return None
@@ -227,33 +494,24 @@ def calcular_inputs_otimizacao(valor_total_investido):
 
     ultimos_precos = precos[ativos_validos].ffill().iloc[-1].fillna(0.0)
     
-    try:
-        df_debug = pd.DataFrame({
-            'Ativo': ultimos_precos.index,
-            'Preco_Atual_R$': ultimos_precos.values
-        })
-        df_debug.to_csv("Trabalho_OTM/debug_precos_baixados.csv", index=False, sep=';', decimal=',')
-        print(f"📄 [DEBUG] Preços atuais salvos em 'debug_precos_baixados.csv'")
-    except Exception as e:
-        print(f"⚠️ Erro ao salvar CSV de debug: {e}")
-    
-    #ret_validos = retornos_diarios[ativos_validos] 
-    vetor_cvar = calcular_cvar_95(ret_validos)
-    vetor_pvp = obter_pvp_ativos_otimizado(ativos_validos)
-    
     inicio_real = ret_validos.index[0].strftime('%Y-%m-%d')
     df_benchmarks = baixar_benchmarks(inicio_real, data_fim.strftime('%Y-%m-%d'))
+    
+    # Remove timezone do índice de benchmarks antes de reindexar
+    if hasattr(df_benchmarks.index, 'tz') and df_benchmarks.index.tz is not None:
+        df_benchmarks.index = df_benchmarks.index.tz_localize(None)
+    
     df_benchmarks = df_benchmarks.reindex(ret_validos.index).ffill().bfill()
 
     if not df_benchmarks.empty:
         df_benchmarks = df_benchmarks / df_benchmarks.iloc[0]
 
-    # Garante que as colunas existam (mesmo que duplicadas) para não quebrar o código
+    # Garante que as colunas existam
     if 'CDI' not in df_benchmarks.columns: df_benchmarks['CDI'] = 1.0
     if 'Ibovespa' not in df_benchmarks.columns: df_benchmarks['Ibovespa'] = 1.0
     if 'S&P500 (BRL)' not in df_benchmarks.columns: df_benchmarks['S&P500 (BRL)'] = df_benchmarks['Ibovespa']
 
-    print("\n--- Inputs Prontos ---")
+    print(f"--- Inputs Prontos para {data_inicio} a {data_fim} ({len(ativos_validos)} ativos) ---")
     
     return {
         'valor_total_investido': valor_total_investido,
@@ -266,5 +524,31 @@ def calcular_inputs_otimizacao(valor_total_investido):
         'nomes_dos_ativos': ativos_validos,
         'n_ativos': len(ativos_validos),
         'retornos_diarios_historicos': ret_validos, 
-        'df_benchmarks': df_benchmarks
+        'df_benchmarks': df_benchmarks,
+        'periodo': {'inicio': data_inicio.strftime('%Y-%m-%d'), 'fim': data_fim.strftime('%Y-%m-%d')}
     }
+
+# --- FUNÇÃO PRINCIPAL (ATUALIZADA PARA USAR A NOVA) ---
+def calcular_inputs_otimizacao(valor_total_investido):
+    """
+    Calcula inputs de otimização usando o período padrão (últimos N anos).
+    Wrapper para calcular_inputs_otimizacao_periodo().
+    """
+    data_fim = datetime.date.today()
+    data_inicio = data_fim - datetime.timedelta(days=config.ANOS_DE_DADOS * 365.25)
+    
+    inputs = calcular_inputs_otimizacao_periodo(valor_total_investido, data_inicio, data_fim)
+    
+    # Salva debug de preços apenas na função padrão
+    if inputs:
+        try:
+            df_debug = pd.DataFrame({
+                'Ativo': inputs['ultimos_precos'].index,
+                'Preco_Atual_R$': inputs['ultimos_precos'].values
+            })
+            df_debug.to_csv("Trabalho_OTM/debug_precos_baixados.csv", index=False, sep=';', decimal=',')
+            print(f"📄 [DEBUG] Preços atuais salvos em 'debug_precos_baixados.csv'")
+        except Exception as e:
+            print(f"⚠️ Erro ao salvar CSV de debug: {e}")
+    
+    return inputs
