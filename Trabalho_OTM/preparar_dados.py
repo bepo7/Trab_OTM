@@ -7,58 +7,23 @@ from bcb import sgs
 import warnings
 from concurrent.futures import ThreadPoolExecutor
 
-# --- 1. IMPORTAR CONFIGURAÇÕES ---
+
 import config
 
-# --- 2. PARÂMETROS ---
+
 DIAS_UTEIS_ANO = 252
-ARQUIVO_CACHE_BENCH = "Trabalho_OTM/benchmarks_cache.csv" # Nome do arquivo de cache
+ARQUIVO_CACHE_BENCH = "Trabalho_OTM/valores_benchmarks.csv" # Nome do arquivo de cache
 
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
-# --- FUNÇÃO DE EMERGÊNCIA (SIMULAÇÃO) ---
-def gerar_dados_sinteticos(data_inicio, data_fim_str):
-    """
-    Gera dados matemáticos caso TUDO falhe (API e Cache).
-    Garante que o usuário veja linhas no gráfico.
-    """
-    print("⚠️ MODO DE EMERGÊNCIA: Gerando dados sintéticos para Benchmarks...")
-    dt_inicio = pd.to_datetime(data_inicio)
-    dt_fim = pd.to_datetime(data_fim_str)
-    
-    # Gera dias úteis
-    datas = pd.date_range(start=dt_inicio, end=dt_fim, freq='B')
-    n_dias = len(datas)
-    
-    # 1. Simula CDI (Crescimento exponencial suave ~11% a.a)
-    taxa_diaria_cdi = (1 + 0.11) ** (1/252) - 1
-    cdi_simulado = np.cumprod(np.repeat(1 + taxa_diaria_cdi, n_dias))
-    
-    # 2. Simula Ibovespa (Random Walk com leve tendência de alta)
-    mu = 0.08 / 252
-    sigma = 0.20 / np.sqrt(252)
-    retornos_ibov = np.random.normal(mu, sigma, n_dias)
-    ibov_simulado = np.cumprod(1 + retornos_ibov)
-    
-    # 3. Simula S&P 500 (Levemente superior ao IBOV na simulação)
-    sp500_simulado = ibov_simulado * 1.05
-    
-    df = pd.DataFrame({
-        'CDI': cdi_simulado / cdi_simulado[0],
-        'Ibovespa': ibov_simulado / ibov_simulado[0],
-        'S&P500 (BRL)': sp500_simulado / sp500_simulado[0]
-    }, index=datas)
-    
-    return df
-
-# --- FUNÇÃO DE DOWNLOAD ROBUSTA ---
+# Download dos benchmarks
 def baixar_benchmarks(data_inicio, data_fim_str):
     print(f"Obtendo benchmarks (Inicio: {data_inicio})...")
     
     df_api = None
     sucesso_api = False
     
-    # --- TENTATIVA 1: APIS ONLINE ---
+    # Tentativa 1: BCB + Yahoo Finance
     try:
         dt_fim_ajustada = pd.to_datetime(data_fim_str) + datetime.timedelta(days=1)
 
@@ -75,7 +40,7 @@ def baixar_benchmarks(data_inicio, data_fim_str):
         except:
             cdi_acumulado = pd.DataFrame()
 
-        # 1.2 Ibovespa e S&P500 (Via ETF IVVB11)
+        # 1.2 Ibovespa e S&P500 (Yahoo Finance)
         try:
             dados_bench = yf.download(['^BVSP', 'IVVB11.SA'], start=data_inicio, end=dt_fim_ajustada, progress=False, auto_adjust=True)
             
@@ -84,7 +49,7 @@ def baixar_benchmarks(data_inicio, data_fim_str):
             else:
                 precos_bench = dados_bench
                 
-            # Limpeza e Normalização
+            # Trata caso só tenha um ativo
             bench_normalizado = precos_bench.ffill().bfill() # bfill evita buracos no inicio
             if not bench_normalizado.empty:
                 bench_normalizado = bench_normalizado / bench_normalizado.iloc[0]
@@ -97,14 +62,12 @@ def baixar_benchmarks(data_inicio, data_fim_str):
 
         # Junta tudo
         if not cdi_acumulado.empty and not bench_normalizado.empty:
-            # Remove timezone de ambos antes de concatenar
             if hasattr(cdi_acumulado.index, 'tz') and cdi_acumulado.index.tz is not None:
                 cdi_acumulado.index = cdi_acumulado.index.tz_localize(None)
             if hasattr(bench_normalizado.index, 'tz') and bench_normalizado.index.tz is not None:
                 bench_normalizado.index = bench_normalizado.index.tz_localize(None)
             
             df_api = pd.concat([cdi_acumulado, bench_normalizado], axis=1).ffill().bfill()
-            # Garante base 1.0
             df_api = df_api / df_api.iloc[0]
             sucesso_api = True
             print("✅ Benchmarks baixados com sucesso.")
@@ -112,7 +75,7 @@ def baixar_benchmarks(data_inicio, data_fim_str):
     except Exception as e:
         print(f"Erro APIs: {e}")
 
-    # --- TENTATIVA 2: CACHE LOCAL ---
+    # Tentativa 2: Verifica Cache Local
     if sucesso_api and df_api is not None:
         try: df_api.to_csv(ARQUIVO_CACHE_BENCH)
         except: pass
@@ -127,11 +90,41 @@ def baixar_benchmarks(data_inicio, data_fim_str):
                 return df_cache / df_cache.iloc[0]
         except: pass
         
-    # --- TENTATIVA 3: SIMULAÇÃO ---
+    # Tentativa 3: Gera dados sintéticos
     return gerar_dados_sinteticos(data_inicio, data_fim_str)
 
-# --- OUTRAS FUNÇÕES AUXILIARES (PADRÃO) ---
+# Caso de erro nos downloads, gera dados sintéticos
+def gerar_dados_sinteticos(data_inicio, data_fim_str):
+    print("⚠️ MODO DE EMERGÊNCIA: Gerando dados sintéticos para Benchmarks...")
+    dt_inicio = pd.to_datetime(data_inicio)
+    dt_fim = pd.to_datetime(data_fim_str)
+    
+    # Gera dias úteis
+    datas = pd.date_range(start=dt_inicio, end=dt_fim, freq='B')
+    n_dias = len(datas)
+    
+    # 1. Simula CDI 
+    taxa_diaria_cdi = (1 + 0.11) ** (1/252) - 1
+    cdi_simulado = np.cumprod(np.repeat(1 + taxa_diaria_cdi, n_dias))
+    
+    # 2. Simula Ibovespa 
+    mu = 0.08 / 252
+    sigma = 0.20 / np.sqrt(252)
+    retornos_ibov = np.random.normal(mu, sigma, n_dias)
+    ibov_simulado = np.cumprod(1 + retornos_ibov)
+    
+    # 3. Simula S&P 500 
+    sp500_simulado = ibov_simulado * 1.05
+    
+    df = pd.DataFrame({
+        'CDI': cdi_simulado / cdi_simulado[0],
+        'Ibovespa': ibov_simulado / ibov_simulado[0],
+        'S&P500 (BRL)': sp500_simulado / sp500_simulado[0]
+    }, index=datas)
+    
+    return df
 
+# Baixa dados com preços e volumes para ser usado na liquidez
 def baixar_dados_com_volume(lista_de_tickers, data_inicio, data_fim):
     if not lista_de_tickers: return None, None
     data_fim_ajustada = data_fim + datetime.timedelta(days=1)
@@ -139,11 +132,13 @@ def baixar_dados_com_volume(lista_de_tickers, data_inicio, data_fim):
         dados = yf.download(lista_de_tickers, start=data_inicio, end=data_fim_ajustada, progress=False, auto_adjust=True)
         if dados.empty: return None, None
         
+        # Extrai preços e volumes
         if 'Close' in dados.columns: precos = dados['Close']
         else: precos = dados
         if 'Volume' in dados.columns: volumes = dados['Volume']
         else: volumes = pd.DataFrame(np.nan, index=precos.index, columns=precos.columns)
 
+        # Trata caso só tenha um ativo
         if len(lista_de_tickers) == 1:
             if isinstance(precos, pd.Series): precos = precos.to_frame(lista_de_tickers[0])
             if isinstance(volumes, pd.Series): volumes = volumes.to_frame(lista_de_tickers[0])
@@ -151,13 +146,11 @@ def baixar_dados_com_volume(lista_de_tickers, data_inicio, data_fim):
         precos = precos.dropna(axis=1, how='all')
         precos = precos.ffill().bfill()
         
-        # Remove timezone para evitar erros de join
         if hasattr(precos.index, 'tz') and precos.index.tz is not None:
             precos.index = precos.index.tz_localize(None)
         
         volumes = volumes.dropna(axis=1, how='all').fillna(0)
-        
-        # Remove timezone dos volumes também
+
         if hasattr(volumes.index, 'tz') and volumes.index.tz is not None:
             volumes.index = volumes.index.tz_localize(None)
         
@@ -169,14 +162,16 @@ def baixar_dados_com_volume(lista_de_tickers, data_inicio, data_fim):
 
         print(f"✅ Dados baixados. Ativos válidos: {len(ativos_comuns)}")
         return precos[ativos_comuns], volumes[ativos_comuns]
+    
     except TypeError as e:
         if "Cannot join tz-naive with tz-aware" in str(e):
             print(f"⚠️ Erro de timezone no download em lote. Tentando download individual...")
-            # Fallback: baixa um por um e remove timezone
+            # Caso de erro de timezone, tenta baixar individualmente
             all_precos = []
             all_volumes = []
             for ticker in lista_de_tickers:
                 try:
+                    # Baixa individualmente os dados
                     dados_individual = yf.download([ticker], start=data_inicio, end=data_fim_ajustada, progress=False, auto_adjust=True)
                     if not dados_individual.empty:
                         if 'Close' in dados_individual.columns:
@@ -188,7 +183,6 @@ def baixar_dados_com_volume(lista_de_tickers, data_inicio, data_fim):
                         else:
                             volume = pd.Series(np.nan, index=preco.index)
                         
-                        # Remove timezone
                         if hasattr(preco.index, 'tz') and preco.index.tz is not None:
                             preco.index = preco.index.tz_localize(None)
                         if hasattr(volume.index, 'tz') and volume.index.tz is not None:
@@ -201,6 +195,7 @@ def baixar_dados_com_volume(lista_de_tickers, data_inicio, data_fim):
                 except:
                     continue
             
+            # Consolida resultados
             if all_precos:
                 precos = pd.concat(all_precos, axis=1).ffill().bfill()
                 volumes = pd.concat(all_volumes, axis=1).fillna(0)
@@ -226,7 +221,9 @@ def baixar_dados_com_volume(lista_de_tickers, data_inicio, data_fim):
         print(f"Traceback: {traceback.format_exc()}")
         return None, None
 
+# Simula evolução diária da carteira para o gráfico do site
 def simular_evolucao_diaria(retornos_hist, pesos, valor_inicial=100):
+    # Calcula retorno diário da carteira e evolução acumulada
     pesos_series = pd.Series(pesos, index=retornos_hist.columns)
     retorno_diario = (retornos_hist * pesos_series).sum(axis=1).fillna(0)
     acumulado = (1 + retorno_diario).cumprod() * valor_inicial
@@ -234,21 +231,8 @@ def simular_evolucao_diaria(retornos_hist, pesos, valor_inicial=100):
     datas = [d.strftime('%Y-%m-%d') for d in acumulado.index]
     return datas, valores
 
+# Simula performance da carteira em um período específico
 def simular_performance_periodo(pesos_carteira, nomes_ativos, data_inicio, data_fim, valor_inicial=100000):
-    """
-    Simula a performance de uma carteira em um período específico usando dados reais.
-    
-    Args:
-        pesos_carteira: Array ou Series com os pesos da carteira
-        nomes_ativos: Lista de nomes dos ativos
-        data_inicio: Data inicial da simulação (datetime.date ou string)
-        data_fim: Data final da simulação (datetime.date ou string)
-        valor_inicial: Valor inicial investido
-    
-    Returns:
-        Dicionário com métricas realizadas: retorno_aa, risco_aa, sharpe, valor_final, evolucao
-    """
-    # Converte strings para datetime.date se necessário
     if isinstance(data_inicio, str):
         data_inicio = datetime.datetime.strptime(data_inicio, '%Y-%m-%d').date()
     if isinstance(data_fim, str):
@@ -276,7 +260,6 @@ def simular_performance_periodo(pesos_carteira, nomes_ativos, data_inicio, data_
         precos = precos.dropna(axis=1, how='all').ffill().bfill()
         
         # Filtra explicitamente para garantir que apenas dados do período sejam usados
-        # IMPORTANTE: Filtrar ANTES de calcular retornos
         precos = precos.loc[data_inicio:data_fim]
         
         if precos.empty:
@@ -318,7 +301,7 @@ def simular_performance_periodo(pesos_carteira, nomes_ativos, data_inicio, data_
         # Calcula retorno total acumulado
         retorno_acumulado = (1 + retorno_carteira_diario).prod() - 1
         
-        # SIMPLIFICADO: Valor final = Capital inicial * (1 + Retorno total)
+        # Cálculo do valor final da carteira
         valor_final = valor_inicial_efetivo * (1 + retorno_acumulado)
         retorno_total = retorno_acumulado
         
@@ -346,9 +329,6 @@ def simular_performance_periodo(pesos_carteira, nomes_ativos, data_inicio, data_
         
         risco_aa = retorno_carteira_diario.std() * np.sqrt(DIAS_UTEIS_ANO)
         
-        # Sharpe (assumindo CDI ~11% a.a. como taxa livre de risco)
-        taxa_livre_risco = 0.11
-        sharpe = (retorno_aa - taxa_livre_risco) / risco_aa if risco_aa > 0 else 0.0
         
         # Evolução para gráfico (recalcula para visualização)
         evolucao = (1 + retorno_carteira_diario).cumprod() * valor_inicial_efetivo
@@ -360,7 +340,6 @@ def simular_performance_periodo(pesos_carteira, nomes_ativos, data_inicio, data_
         return {
             'retorno_aa': retorno_aa,
             'risco_aa': risco_aa,
-            'sharpe': sharpe,
             'valor_final': valor_final,
             'retorno_total': retorno_total,
             'evolucao': {'datas': datas_evolucao, 'valores': valores_evolucao},
@@ -371,7 +350,7 @@ def simular_performance_periodo(pesos_carteira, nomes_ativos, data_inicio, data_
         print(f"❌ Erro na simulação: {e}")
         return None
 
-
+# Pega P/VP individual do ativo
 def pegar_pvp_individual(ticker):
     try:
         t = yf.Ticker(ticker)
@@ -379,12 +358,10 @@ def pegar_pvp_individual(ticker):
         return ticker, (float(val) if val is not None and float(val) > 0 else 2.0)
     except: return ticker, np.nan
 
+# Obtém P/VP para lista de ativos, com cache local
 def obter_pvp_ativos_otimizado(lista_tickers):
-    """
-    Obtém P/VP dos ativos com cache em CSV.
-    Cache expira após 24 horas.
-    """
-    cache_file = 'pvp_cache.csv'
+  
+    cache_file = 'Trabalho_OTM/valores_pvp.csv'
     cache_max_age_hours = 24
     
     # Tenta carregar cache existente
@@ -427,6 +404,7 @@ def obter_pvp_ativos_otimizado(lista_tickers):
     
     return pd.Series(pvp_data).reindex(lista_tickers).fillna(1.0)
 
+# Calcula CVaR 95% para cada ativo
 def calcular_cvar_95(retornos):
     cvar_dict = {}
     for ativo in retornos.columns:
@@ -438,6 +416,7 @@ def calcular_cvar_95(retornos):
             cvar_dict[ativo] = abs(rets_sorted[:cutoff].mean())
     return pd.Series(cvar_dict)
 
+# Limpa dados removendo NaNs e ajustando matrizes
 def limpar_dados(retornos_medios, matriz_cov, volumes_medios):
     mask = ~np.isfinite(retornos_medios)
     if mask.any(): retornos_medios = retornos_medios.drop(retornos_medios[mask].index)
@@ -447,19 +426,9 @@ def limpar_dados(retornos_medios, matriz_cov, volumes_medios):
     volumes_medios = volumes_medios.reindex(retornos_medios.index).fillna(0)
     return retornos_medios, matriz_cov, volumes_medios
 
-# --- FUNÇÃO PRINCIPAL COM PERÍODO CUSTOMIZÁVEL ---
+# Função principal para calcular inputs de otimização para um período específico
 def calcular_inputs_otimizacao_periodo(valor_total_investido, data_inicio, data_fim):
-    """
-    Calcula inputs de otimização para um período específico.
     
-    Args:
-        valor_total_investido: Valor a ser investido
-        data_inicio: Data inicial (datetime.date ou string 'YYYY-MM-DD')
-        data_fim: Data final (datetime.date ou string 'YYYY-MM-DD')
-    
-    Returns:
-        Dicionário com inputs de otimização ou None se falhar
-    """
     lista_ativos = config.UNIVERSO_COMPLETO
     if not lista_ativos: return None
 
@@ -471,33 +440,39 @@ def calcular_inputs_otimizacao_periodo(valor_total_investido, data_inicio, data_
     
     print(f"\n--- Baixando dados para período: {data_inicio} a {data_fim} ---")
     
+    # Baixa preços e volumes
     precos, volumes = baixar_dados_com_volume(lista_ativos, data_inicio, data_fim)
     if precos is None or precos.empty: return None
 
+    # Calcula retornos diários
     retornos_diarios = precos.pct_change().replace([np.inf, -np.inf], np.nan).dropna()
     if retornos_diarios.empty: return None
     
+    # Calcula retornos médios anuais e matriz de covariância anualizada
     retornos_medios = retornos_diarios.mean() * DIAS_UTEIS_ANO
     matriz_cov = retornos_diarios.cov() * DIAS_UTEIS_ANO
     
+    # Calcula volume financeiro médio diário
     preco_medio = precos.tail(126).mean()
     vol_qtd = volumes.tail(126).mean()
     volume_financeiro = (vol_qtd * preco_medio).fillna(0)
 
     retornos_medios, matriz_cov, volume_financeiro = limpar_dados(retornos_medios, matriz_cov, volume_financeiro)
-    
+
     ativos_validos = list(retornos_medios.index)
     ret_validos = retornos_diarios[ativos_validos] 
     
+    # Calcula vetor CVaR 95% e P/VP
     vetor_cvar = calcular_cvar_95(ret_validos)
     vetor_pvp = obter_pvp_ativos_otimizado(ativos_validos)
 
     ultimos_precos = precos[ativos_validos].ffill().iloc[-1].fillna(0.0)
     
+    # Baixa benchmarks
     inicio_real = ret_validos.index[0].strftime('%Y-%m-%d')
     df_benchmarks = baixar_benchmarks(inicio_real, data_fim.strftime('%Y-%m-%d'))
-    
-    # Remove timezone do índice de benchmarks antes de reindexar
+
+    # Ajusta timezone se necessário
     if hasattr(df_benchmarks.index, 'tz') and df_benchmarks.index.tz is not None:
         df_benchmarks.index = df_benchmarks.index.tz_localize(None)
     
@@ -513,6 +488,7 @@ def calcular_inputs_otimizacao_periodo(valor_total_investido, data_inicio, data_
 
     print(f"--- Inputs Prontos para {data_inicio} a {data_fim} ({len(ativos_validos)} ativos) ---")
     
+    # Retorna dicionário de inputs
     return {
         'valor_total_investido': valor_total_investido,
         'retornos_medios': retornos_medios,
@@ -528,12 +504,10 @@ def calcular_inputs_otimizacao_periodo(valor_total_investido, data_inicio, data_
         'periodo': {'inicio': data_inicio.strftime('%Y-%m-%d'), 'fim': data_fim.strftime('%Y-%m-%d')}
     }
 
-# --- FUNÇÃO PRINCIPAL (ATUALIZADA PARA USAR A NOVA) ---
+# Função principal para calcular inputs de otimização usando período padrão
 def calcular_inputs_otimizacao(valor_total_investido):
-    """
-    Calcula inputs de otimização usando o período padrão (últimos N anos).
-    Wrapper para calcular_inputs_otimizacao_periodo().
-    """
+    
+    # Define período padrão
     data_fim = datetime.date.today()
     data_inicio = data_fim - datetime.timedelta(days=config.ANOS_DE_DADOS * 365.25)
     
@@ -546,8 +520,8 @@ def calcular_inputs_otimizacao(valor_total_investido):
                 'Ativo': inputs['ultimos_precos'].index,
                 'Preco_Atual_R$': inputs['ultimos_precos'].values
             })
-            df_debug.to_csv("Trabalho_OTM/debug_precos_baixados.csv", index=False, sep=';', decimal=',')
-            print(f"📄 [DEBUG] Preços atuais salvos em 'debug_precos_baixados.csv'")
+            df_debug.to_csv("Trabalho_OTM/valores_cotas.csv", index=False, sep=';', decimal=',')
+            print(f"📄 [DEBUG] Preços atuais salvos em 'valores_cotas.csv'")
         except Exception as e:
             print(f"⚠️ Erro ao salvar CSV de debug: {e}")
     

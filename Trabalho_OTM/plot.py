@@ -6,7 +6,7 @@ import matplotlib.patheffects as path_effects
 import numpy as np
 import os
 
-# --- FUNÇÃO 1: PIZZA (MANTIDA IGUAL) ---
+# Função para plotar gráfico de pizza dos pesos da carteira
 def plot_pizza_por_ativos(serie_pesos, risco, retorno, valor_investido, nome_arquivo, titulo_personalizado):
     # 1. Verifica sobra de caixa
     soma_pesos = serie_pesos.sum()
@@ -26,12 +26,12 @@ def plot_pizza_por_ativos(serie_pesos, risco, retorno, valor_investido, nome_arq
 
     fig, ax = plt.subplots(figsize=(10, 8))
     
-    # Cores: Gera mapa espectral para ativos, e Cinza para Caixa
+    # Cores
     cmap = plt.get_cmap("nipy_spectral")
     colors = []
     num_ativos = len(labels)
     
-    # Se tiver caixa, ele entra na conta das cores, mas forçamos cinza
+    # Se tiver caixa, ele entra na conta das cores mas sempre cinza
     idx_cor = 0
     total_ativos_reais = len([l for l in labels if l != "Caixa / Não Investido"])
     
@@ -44,6 +44,7 @@ def plot_pizza_por_ativos(serie_pesos, risco, retorno, valor_investido, nome_arq
             colors.append(cmap(0.05 + 0.9 * ratio))
             idx_cor += 1
 
+    # Função para formatar porcentagem
     def autopct_func(pct):
         return f"{pct:.1f}%" if pct >= 1.5 else ""
 
@@ -56,6 +57,7 @@ def plot_pizza_por_ativos(serie_pesos, risco, retorno, valor_investido, nome_arq
         wedgeprops=dict(width=0.4, edgecolor='w', linewidth=1)
     )
 
+    # Estilo do texto
     plt.setp(autotexts, size=9, weight="bold", color="white", 
              path_effects=[path_effects.withStroke(linewidth=2, foreground='black')])
     
@@ -80,14 +82,14 @@ def plot_pizza_por_ativos(serie_pesos, risco, retorno, valor_investido, nome_arq
     plt.savefig(nome_arquivo, dpi=150)
     plt.close(fig)
 
-# --- FUNÇÃO PRINCIPAL (AGORA GERA OS 4 GRÁFICOS) ---
+# Função para gerar visualizações completas
 def rodar_visualizacao_completa(inputs, res_ga, res_gurobi_warm, res_gurobi_cold, 
                                 path_ga, path_gu_warm, path_gu_cold):
     
     valor_total = inputs['valor_total_investido']
     nomes_ativos = inputs['nomes_dos_ativos']
 
-    # 1. PIZZA GA
+    # Gera os gráficos de pizza para o GA
     if res_ga:
         row_ga = res_ga['dataframe_resultado'].iloc[0]
         # Dropa colunas que não são pesos
@@ -103,14 +105,13 @@ def rodar_visualizacao_completa(inputs, res_ga, res_gurobi_warm, res_gurobi_cold
             titulo_personalizado="Algoritmo Genético"
         )
         
-        # 1.1 GERAR BACKTEST (Usando pesos do GA como referência principal)
-        # Se quiser usar os pesos do Gurobi, basta trocar aqui
+        # Se possível, plota a evolução do GA
         if 'retornos_diarios_historicos' in inputs and 'df_benchmarks' in inputs:
             # Transforma pesos_ga (Series) em array numpy para cálculo
             pesos_array = pesos_ga.reindex(nomes_ativos).fillna(0).values
     
 
-    # 2. PIZZA GUROBI WARM
+    # Gera os gráficos de pizza para o Gurobi Warm Start
     if res_gurobi_warm:
         pesos_warm = pd.Series(res_gurobi_warm['pesos'], index=nomes_ativos)
         plot_pizza_por_ativos(
@@ -122,7 +123,7 @@ def rodar_visualizacao_completa(inputs, res_ga, res_gurobi_warm, res_gurobi_cold
             titulo_personalizado="Gurobi (Warm Start)"
         )
 
-    # 3. PIZZA GUROBI COLD
+    # Gera os gráficos de pizza para o Gurobi Cold Start
     if res_gurobi_cold:
         pesos_cold = pd.Series(res_gurobi_cold['pesos'], index=nomes_ativos)
         plot_pizza_por_ativos(

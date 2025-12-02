@@ -138,7 +138,7 @@ def obter_universo_completo():
         lista_completa.extend(UNIVERSO_ATIVOS[categoria])
     lista_unica = sorted(list(set(lista_completa)))
     lista_limpa = [t for t in lista_unica if t not in TICKERS_COM_FALHA_YF]
-    print(f"--- Config: Universo expandido de {len(lista_limpa)} ativos carregado ---")
+    # print(f"--- Config: Universo expandido de {len(lista_limpa)} ativos carregado ---")
     return lista_limpa
 
 # --- NOVA FUNÇÃO AUXILIAR PARA MAPEAMENTO ---

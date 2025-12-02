@@ -169,16 +169,19 @@
         .tab-btn.active {
             color: var(--secondary-color);
             border-bottom-color: var(--secondary-color);
+            border-bottom: 4px solid var(--secondary-color);
         }
 
         .tab-btn.active-gu-warm {
             color: var(--gurobi-warm-color);
             border-bottom-color: var(--gurobi-warm-color);
+            border-bottom: 4px solid var(--gurobi-warm-color);
         }
 
         .tab-btn.active-gu-cold {
             color: var(--gurobi-cold-color);
             border-bottom-color: var(--gurobi-cold-color);
+            border-bottom: 4px solid var(--gurobi-cold-color);
         }
 
         .tab-content {
@@ -241,6 +244,7 @@
             padding: 20px;
             border-radius: 10px;
             border: 1px solid #e0e0e0;
+            padding-bottom: 60px;
         }
 
         /* CABEÇALHOS DAS TABELAS COM CONTADOR */
@@ -325,17 +329,20 @@
 
         .gurobi-table th:nth-child(2),
         .gurobi-table td:nth-child(2) {
-            width: 30%;
+            width: 20%;
+            /* Cotas */
         }
 
         .gurobi-table th:nth-child(3),
         .gurobi-table td:nth-child(3) {
-            width: 20%;
+            width: 25%;
+            /* Peso */
         }
 
         .gurobi-table th:nth-child(4),
         .gurobi-table td:nth-child(4) {
-            width: 20%;
+            width: 25%;
+            /* Valor */
         }
 
         /* LARGURAS ESPECÍFICAS PARA GA (3 COLUNAS: Nome, Peso, Valor) */
@@ -513,7 +520,7 @@
             <div class="loading-container">
                 <div class="spinner"></div>
                 <h2>Otimizando...</h2>
-                <p>Executando Algoritmos (GA, Gurobi Warm, Gurobi Cold)...</p>
+                <p>Executando Algoritmos (AG, Gurobi Warm, Gurobi Cold)...</p>
             </div>
         </div>
 
@@ -570,7 +577,7 @@
                             <span class="count-badge ga-theme"><span id="qtd_setores_GA">0</span> Setores</span>
                         </div>
                         <div class="table-scroll-area">
-                            <table id="table_sector_GA">
+                            <table id="table_sector_GA" class="ga-table">
                                 <thead>
                                     <tr>
                                         <th>Setor</th>
@@ -589,7 +596,7 @@
                             <span class="count-badge ga-theme"><span id="qtd_ativos_GA">0</span> Ativos</span>
                         </div>
                         <div class="table-scroll-area">
-                            <table id="table_GA">
+                            <table id="table_GA" class="ga-table">
                                 <thead>
                                     <tr>
                                         <th>Ativo</th>
@@ -605,6 +612,18 @@
                     <div class="result-base-card line-chart-container">
                         <canvas id="chart_line_GA"></canvas>
                     </div>
+                    <div class="result-base-card line-chart-container" style="margin-top: 20px;">
+                        <h4 style="text-align: center; margin-bottom: 15px; color: var(--primary-color);">
+                            Fronteira Eficiente (Curva de Pareto)
+                        </h4>
+                        <div id="loading_frontier_GA" style="text-align: center; padding: 20px; display: none;">
+                            <div class="spinner" style="width: 30px; height: 30px; border-width: 4px;">
+                            </div>
+                            <p>Calculando fronteira...</p>
+                        </div>
+                        <canvas id="chart_fronteira_GA"></canvas>
+                    </div>
+
                 </div>
             </div>
 
@@ -652,7 +671,7 @@
                             <span class="count-badge warm-theme"><span id="qtd_setores_GU_WARM">0</span> Setores</span>
                         </div>
                         <div class="table-scroll-area">
-                            <table id="table_sector_GU_WARM" class="gu-warm-table">
+                            <table id="table_sector_GU_WARM" class="gurobi-table">
                                 <thead>
                                     <tr>
                                         <th>Setor</th>
@@ -672,7 +691,7 @@
                             <span class="count-badge warm-theme"><span id="qtd_ativos_GU_WARM">0</span> Ativos</span>
                         </div>
                         <div class="table-scroll-area">
-                            <table id="table_GU_WARM" class="gu-warm-table">
+                            <table id="table_GU_WARM" class="gurobi-table">
                                 <thead>
                                     <tr>
                                         <th>Ativo</th>
@@ -689,6 +708,19 @@
                     <div class="result-base-card line-chart-container">
                         <canvas id="chart_line_GU_WARM"></canvas>
                     </div>
+                    <div class="result-base-card line-chart-container" style="margin-top: 20px;">
+                        <h4 style="text-align: center; margin-bottom: 15px; color: var(--gurobi-warm-color);">
+                            Fronteira Eficiente (Curva de Pareto)
+                        </h4>
+                        <div id="loading_frontier_GU_WARM" style="text-align: center; padding: 20px; display: none;">
+                            <div class="spinner"
+                                style="width: 30px; height: 30px; border-width: 4px; border-top-color: var(--gurobi-warm-color);">
+                            </div>
+                            <p>Calculando fronteira...</p>
+                        </div>
+                        <canvas id="chart_fronteira_GU_WARM"></canvas>
+                    </div>
+
                 </div>
             </div>
 
@@ -736,7 +768,7 @@
                             <span class="count-badge cold-theme"><span id="qtd_setores_GU_COLD">0</span> Setores</span>
                         </div>
                         <div class="table-scroll-area">
-                            <table id="table_sector_GU_COLD" class="gu-cold-table">
+                            <table id="table_sector_GU_COLD" class="gurobi-table">
                                 <thead>
                                     <tr>
                                         <th>Setor</th>
@@ -756,7 +788,7 @@
                             <span class="count-badge cold-theme"><span id="qtd_ativos_GU_COLD">0</span> Ativos</span>
                         </div>
                         <div class="table-scroll-area">
-                            <table id="table_GU_COLD" class="gu-cold-table">
+                            <table id="table_GU_COLD" class="gurobi-table">
                                 <thead>
                                     <tr>
                                         <th>Ativo</th>
@@ -773,6 +805,19 @@
                     <div class="result-base-card line-chart-container">
                         <canvas id="chart_line_GU_COLD"></canvas>
                     </div>
+                    <div class="result-base-card line-chart-container" style="margin-top: 20px;">
+                        <h4 style="text-align: center; margin-bottom: 15px; color: var(--gurobi-cold-color);">
+                            Fronteira Eficiente (Curva de Pareto)
+                        </h4>
+                        <div id="loading_frontier_GU_COLD" style="text-align: center; padding: 20px; display: none;">
+                            <div class="spinner"
+                                style="width: 30px; height: 30px; border-width: 4px; border-top-color: var(--gurobi-cold-color);">
+                            </div>
+                            <p>Calculando fronteira...</p>
+                        </div>
+                        <canvas id="chart_fronteira_GU_COLD"></canvas>
+                    </div>
+
                 </div>
             </div>
 
@@ -780,7 +825,6 @@
                 Simulação</button>
         </div>
 
-        <!-- NOVA SEÇÃO: RESULTADOS DA ANÁLISE TEMPORAL -->
         <div id="results-temporal" class="step">
             <h2>📊 Análise Temporal (2021-2024)</h2>
             <p style="text-align: center; color: #666;">Comparação: Carteira Treino vs Carteira Ótima</p>
@@ -1146,9 +1190,16 @@
             document.getElementById('content-' + tabName).classList.add('active');
 
             const btn = document.getElementById('btnTab' + tabName.toUpperCase().replace('_', ''));
-            if (tabName === 'gu_warm') btn.classList.add('active-gu-warm');
-            else if (tabName === 'gu_cold') btn.classList.add('active-gu-cold');
-            else btn.classList.add('active');
+
+            btn.classList.add('active');
+
+            if (tabName === 'gu_warm') {
+                btn.classList.add('active-gu-warm');
+            } else if (tabName === 'gu_cold') {
+                btn.classList.add('active-gu-cold');
+            } else { // 'ga'
+                btn.classList.add('active'); // Mantém a classe 'active' para o AG (verde padrão)
+            }
         }
 
         // --- EXECUÇÃO PRINCIPAL ---
@@ -1165,21 +1216,22 @@
 
             showStep('loading');
 
+            const payload = {
+                valor: document.getElementById('valorTotal').value,
+                lambda: document.getElementById('lambdaFactor').value,
+                risco: document.getElementById('riskCap').value,
+                teto_ativo: document.getElementById('maxAssetWeight').value,
+                teto_setor: document.getElementById('maxSectorWeight').value,
+                proibidos: proibidos,
+                max_ativos: maxGlobal,
+                max_ativos_setor: maxSector
+            };
+
             try {
                 const response = await fetch('/otimizar', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        valor: document.getElementById('valorTotal').value,
-                        lambda: document.getElementById('lambdaFactor').value,
-                        risco: document.getElementById('riskCap').value,
-                        teto_ativo: document.getElementById('maxAssetWeight').value,
-                        teto_setor: document.getElementById('maxSectorWeight').value,
-                        proibidos: proibidos,
-                        // ENVIA OS NOVOS PARAMETROS PARA O PYTHON
-                        max_ativos: maxGlobal,
-                        max_ativos_setor: maxSector
-                    })
+                    body: JSON.stringify(payload)
                 });
                 const data = await response.json();
                 if (!data.sucesso) throw new Error(data.erro);
@@ -1187,12 +1239,16 @@
                 renderizarTudo(data);
                 showStep('results');
 
+                // Inicia cálculo da fronteira em background
+                loadEfficientFrontier(payload, data);
+
             } catch (error) {
-                alert("Erro: " + error.message);
+                let msg = error.message;
+                if (msg.includes("Failed to fetch")) msg = "Erro de conexão ou Timeout (Servidor demorou).";
+                alert("Erro: " + msg);
                 showStep('step2');
             }
         }
-
         async function startTemporalAnalysis() {
             const modoSetor = document.querySelector('input[name="sectorMode"]:checked').value;
             let proibidos = [];
@@ -1231,7 +1287,9 @@
                 showStep('results-temporal');
 
             } catch (error) {
-                alert("Erro na análise temporal: " + error.message);
+                let msg = error.message;
+                if (msg.includes("Failed to fetch")) msg = "Erro de conexão ou Timeout (Servidor demorou).";
+                alert("Erro na análise temporal: " + msg);
                 showStep('step2');
             } finally {
                 // Restaura textos originais
@@ -1344,7 +1402,6 @@
             document.getElementById('content-' + tabName).classList.add('active');
             document.getElementById('btnTab' + tabName.charAt(0).toUpperCase() + tabName.slice(1)).classList.add('active');
         }
-
 
         function renderizarTudo(data) {
             fillData('GA', data.ga);
@@ -1465,6 +1522,100 @@
                 }
             });
         }
+
+        // --- FUNÇÃO PARA CALCULAR FRONTEIRA EFICIENTE (ASSÍNCRONA) ---
+        function loadEfficientFrontier(payload, currentResults) {
+            // Mostra loading em todas as abas
+            if (document.getElementById('loading_frontier_GA')) document.getElementById('loading_frontier_GA').style.display = 'block';
+            if (document.getElementById('loading_frontier_GU_WARM')) document.getElementById('loading_frontier_GU_WARM').style.display = 'block';
+            if (document.getElementById('loading_frontier_GU_COLD')) document.getElementById('loading_frontier_GU_COLD').style.display = 'block';
+
+            // Limpa gráficos anteriores se existirem
+            if (window.chartFrontierGA) window.chartFrontierGA.destroy();
+            if (window.chartFrontierGUWarm) window.chartFrontierGUWarm.destroy();
+            if (window.chartFrontierGUCold) window.chartFrontierGUCold.destroy();
+
+            fetch('/calcular-fronteira', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            }).then(response => response.json()).then(data => {
+                // Esconde loading
+                if (document.getElementById('loading_frontier_GA')) document.getElementById('loading_frontier_GA').style.display = 'none';
+                if (document.getElementById('loading_frontier_GU_WARM')) document.getElementById('loading_frontier_GU_WARM').style.display = 'none';
+                if (document.getElementById('loading_frontier_GU_COLD')) document.getElementById('loading_frontier_GU_COLD').style.display = 'none';
+
+                if (data.sucesso) {
+                    renderFrontierChart('chart_fronteira_GA', data.fronteira.ga, currentResults.ga, 'rgba(31, 93, 34, 1)', 'rgba(31, 93, 34, 0.2)');
+                    renderFrontierChart('chart_fronteira_GU_WARM', data.fronteira.gurobi_warm, currentResults.gurobi_warm, 'rgba(0, 86, 179, 1)', 'rgba(0, 86, 179, 0.2)');
+                    renderFrontierChart('chart_fronteira_GU_COLD', data.fronteira.gurobi_cold, currentResults.gurobi_cold, 'rgba(106, 27, 154, 1)', 'rgba(106, 27, 154, 0.2)');
+                } else {
+                    console.error("Erro na fronteira:", data.erro);
+                }
+            }).catch(err => {
+                console.error("Erro fetch fronteira:", err);
+                if (document.getElementById('loading_frontier_GA')) document.getElementById('loading_frontier_GA').style.display = 'none';
+                if (document.getElementById('loading_frontier_GU_WARM')) document.getElementById('loading_frontier_GU_WARM').style.display = 'none';
+                if (document.getElementById('loading_frontier_GU_COLD')) document.getElementById('loading_frontier_GU_COLD').style.display = 'none';
+            });
+        }
+
+        function renderFrontierChart(canvasId, frontierPoints, currentPointData, colorLine, colorFill) {
+            const ctx = document.getElementById(canvasId).getContext('2d');
+            const scatterData = frontierPoints.map(p => ({ x: p.x, y: p.y }));
+            let currentPoint = null;
+            if (currentPointData && currentPointData.metricas) {
+                currentPoint = {
+                    x: parseFloat(currentPointData.metricas.risco_aa),
+                    y: parseFloat(currentPointData.metricas.retorno_aa)
+                };
+            }
+            const datasets = [{
+                label: 'Fronteira Eficiente',
+                data: scatterData,
+                borderColor: colorLine,
+                backgroundColor: colorFill,
+                showLine: true,
+                tension: 0.4,
+                pointRadius: 5
+            }];
+            if (currentPoint) {
+                datasets.push({
+                    label: 'Sua Carteira',
+                    data: [currentPoint],
+                    borderColor: '#FFD700',
+                    backgroundColor: '#FFD700',
+                    pointRadius: 10,
+                    pointHoverRadius: 12,
+                    pointStyle: 'star'
+                });
+            }
+            const chartVar = new Chart(ctx, {
+                type: 'scatter',
+                data: { datasets: datasets },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: { type: 'linear', position: 'bottom', title: { display: true, text: 'Risco (Volatilidade % a.a.)' } },
+                        y: { title: { display: true, text: 'Retorno (% a.a.)' } }
+                    },
+                    plugins: {
+                        tooltip: {
+                            callbacks: {
+                                label: function (context) {
+                                    return `Risco: ${context.parsed.x.toFixed(2)}% | Retorno: ${context.parsed.y.toFixed(2)}%`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+            if (canvasId === 'chart_fronteira_GA') window.chartFrontierGA = chartVar;
+            if (canvasId === 'chart_fronteira_GU_WARM') window.chartFrontierGUWarm = chartVar;
+            if (canvasId === 'chart_fronteira_GU_COLD') window.chartFrontierGUCold = chartVar;
+        }
+
     </script>
 
 </body>

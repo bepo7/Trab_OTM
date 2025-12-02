@@ -5,14 +5,13 @@ from pymoo.algorithms.soo.nonconvex.ga import GA
 from pymoo.core.repair import Repair
 from pymoo.termination.default import DefaultSingleObjectiveTermination
 
-# --- IMPORTS DO PROJETO ---
 import modelo_problema_setor
 import config
 
+# Parâmetros do Algoritmo Genético
 POPULACAO_SIZE = 100
 NUM_GERACOES = 1500
 
-# --- CRITÉRIO DE PARADA ---
 TERMINATION = DefaultSingleObjectiveTermination(
     ftol=1e-9,         
     period=100,        
@@ -21,52 +20,44 @@ TERMINATION = DefaultSingleObjectiveTermination(
     cvtol=1e-20        
 )
 
-# ==============================================================================
-# CLASSE DE REPARO CUSTOMIZADA (CORRIGIDA)
-# ==============================================================================
+# Função Repair personalizada para impor tetos setoriais
 class SectorCapRepair(Repair):
     def __init__(self, mapa_setores, nomes_ativos, teto_setor, xu):
-        """
-        Inicializa o reparador com os índices dos setores para performance rápida.
-        """
-        # --- CORREÇÃO AQUI: Inicializa a classe pai do Pymoo ---
+       
         super().__init__() 
         
+        # Limite máximo por setor (ex: 0.10 para 10%)
         self.teto_setor = teto_setor
-        self.xu = xu # Limites superiores individuais (Liquidez e Teto Ativo)
-        
-        # Pré-processamento: Mapear quais colunas (índices) pertencem a qual setor
+        self.xu = xu 
+
         self.indices_setores = [] 
         if mapa_setores:
             for setor, lista_ativos_setor in mapa_setores.items():
-                # Encontra os índices numéricos dos ativos deste setor
                 idxs = [i for i, nome in enumerate(nomes_ativos) if nome in lista_ativos_setor]
                 if idxs:
                     self.indices_setores.append(idxs)
 
     def _do(self, problem, X, **kwargs):
-        # 1. LIMPEZA BÁSICA (NaNs e Valores Infinitos)
+
+        # 1. Trata NaNs/Infs
         X = np.nan_to_num(X, nan=0.0, posinf=0.0, neginf=0.0)
         
-        # 2. LIMPEZA DE RUÍDO (Remove pesos muito pequenos)
+        # 2. Limpeza Inicial (Remove pesos muito pequenos)
         X[X < 0.005] = 0.0
         
-        # 3. RESPEITAR LIMITES INDIVIDUAIS (Liquidez + Teto Usuário)
+        # 3. Restrição de Teto Individual (xu)
         if self.xu is not None:
              X = np.minimum(X, self.xu)
 
-        # 4. NORMALIZAÇÃO (Apenas se estourar o orçamento de 100%)
+        # 4. Garantia de Orçamento (Soma ≤ 1.0)
         somas = X.sum(axis=1, keepdims=True)
-        
-        # Se a soma for > 1.0, normalizamos para baixo (divide pela soma)
-        # Se a soma for < 1.0, NÃO normalizamos para cima, pois isso violaria o teto individual (xu)
-        # O GA vai aprender a preencher o espaço se for vantajoso.
+
         mask_estouro_orcamento = somas > 1.0
         fatores = np.ones_like(somas)
         np.putmask(fatores, mask_estouro_orcamento, 1.0 / (somas + 1e-9))
         X = X * fatores
 
-        # 5. APLICAÇÃO DO TETO POR SETOR (Corte)
+        # 5. Aplicação do Teto Setorial
         if self.teto_setor < 0.999:
             for idxs in self.indices_setores:
                 # Soma os pesos deste setor para cada indivíduo da população
@@ -82,19 +73,17 @@ class SectorCapRepair(Repair):
                 # Reduz os pesos dos ativos desse setor
                 X[:, idxs] *= fatores
         
-        # 6. LIMPEZA FINAL (Garante que cortes não geraram resíduos < 0.5%)
+        # 6. Limpeza Final (Remove pesos muito pequenos)
         X[X < 0.005] = 0.0
 
-        # 7. RETORNO (Pode somar < 1.0, gerando Caixa)
         return X
 
-# ==============================================================================
-# FUNÇÃO PRINCIPAL DE EXECUÇÃO
-# ==============================================================================
+# 
 def rodar_otimização(inputs, risco_maximo_usuario, lambda_aversao_risco, 
                      setores_proibidos=None, 
                      teto_maximo_ativo=0.30, 
-                     teto_maximo_setor=1.0):
+                     teto_maximo_setor=1.0,
+                     verbose=True):
     
     # 1. Extração dos Inputs
     retornos_medios = inputs['retornos_medios']
@@ -109,7 +98,8 @@ def rodar_otimização(inputs, risco_maximo_usuario, lambda_aversao_risco,
     # Obtém o mapa de setores para passar ao Repair
     mapa_setores = config.obter_mapa_setores_ativos()
 
-    print("\n[GA] Inicializando Modelo Multiobjetivo...")
+    if verbose:
+        print("\n[GA] Inicializando Modelo Multiobjetivo...")
     
     # 2. Instancia o Problema (Passando os novos tetos)
     problema = modelo_problema_setor.OtimizacaoPortfolio(
@@ -125,16 +115,18 @@ def rodar_otimização(inputs, risco_maximo_usuario, lambda_aversao_risco,
         mapa_setores=mapa_setores,
         setores_proibidos=setores_proibidos,
         teto_maximo_ativo=teto_maximo_ativo, 
-        teto_maximo_setor=teto_maximo_setor  
+        teto_maximo_setor=teto_maximo_setor,
+        verbose=verbose  
     )
     
-    print(f"[GA] Configurando restrições...")
-    if setores_proibidos: print(f"   > Setores Proibidos: {setores_proibidos}")
-    print(f"   > Teto por Ativo: {teto_maximo_ativo:.1%}")
-    print(f"   > Teto por Setor: {teto_maximo_setor:.1%}")
-    print()
-        
-    print(f"[GA] Rodando Evolução ({NUM_GERACOES} gerações)...")
+    if verbose:
+        print(f"[GA] Configurando restrições...")
+        if setores_proibidos: print(f"   > Setores Proibidos: {setores_proibidos}")
+        print(f"   > Teto por Ativo: {teto_maximo_ativo:.1%}")
+        print(f"   > Teto por Setor: {teto_maximo_setor:.1%}")
+        print()
+            
+        print(f"[GA] Rodando Evolução ({NUM_GERACOES} gerações)...")
     
     # 3. Configura o Algoritmo com o novo Repair
     algoritmo = GA(
@@ -159,13 +151,15 @@ def rodar_otimização(inputs, risco_maximo_usuario, lambda_aversao_risco,
 
     # 5. Processa Resultados
     if res and res.X is not None:
-        print(f"Otimização concluída após {res.algorithm.n_gen} gerações.")
+        if verbose:
+            print(f"Otimização concluída após {res.algorithm.n_gen} gerações.")
+            print()
         pesos_otimos = res.X
         utility_score = res.F[0]
         
         # Verifica se houve "Caixa" (Soma < 1.0)
         soma_pesos = np.sum(pesos_otimos)
-        if soma_pesos < 0.99:
+        if soma_pesos < 0.99 and verbose:
             print(f"[GA] Aviso: Restrições impediram 100% de alocação. Investido: {soma_pesos:.1%}")
         
         # Métricas Finais
@@ -215,5 +209,6 @@ def rodar_otimização(inputs, risco_maximo_usuario, lambda_aversao_risco,
         }
             
     else:
-        print("\nALERTA: Otimização não convergiu para uma solução viável.")
+        if verbose:
+            print("\nALERTA: Otimização não convergiu para uma solução viável.")
         return None

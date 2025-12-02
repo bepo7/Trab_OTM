@@ -8,7 +8,7 @@ class OtimizacaoPortfolio(Problem):
                  volume_medio, valor_investido,
                  risco_maximo_usuario, lambda_aversao_risco,
                  nomes_ativos=None, mapa_setores=None, setores_proibidos=None,
-                 teto_maximo_ativo=0.30, teto_maximo_setor=1.0):
+                 teto_maximo_ativo=0.30, teto_maximo_setor=1.0, verbose=True):
         
         self.retornos_medios = retornos_medios
         self.matriz_cov = matriz_cov
@@ -59,12 +59,7 @@ class OtimizacaoPortfolio(Problem):
                             
         # Garante que não ficou nada negativo
         xu = np.maximum(0.0, xu)
-        
-        # Debug no console para confirmação
-        limitados = np.sum((xu < 0.1) & (xu > 0.0))
-        if limitados > 0:
-            print(f"--> [GA Problem] {limitados} ativos tiveram o teto individual reduzido para <10%.")
-             
+
         # CONFIGURAÇÃO DO PYMOO: 
         # n_constr=2 (1 Risco + 1 Orçamento Máximo)
         # n_eq_constr=0 (Nenhuma igualdade, para permitir Caixa)

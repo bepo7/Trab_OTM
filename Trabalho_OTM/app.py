@@ -5,6 +5,11 @@ import traceback
 import numpy as np
 import pandas as pd
 import threading
+import concurrent.futures
+import logging
+
+log = logging.getLogger('werkzeug')
+log.setLevel(logging.ERROR)
 
 # --- CONFIGURAÇÃO DE CAMINHOS ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -15,6 +20,7 @@ if not os.path.exists(STATIC_DIR):
     os.makedirs(STATIC_DIR)
 
 app = Flask(__name__, static_folder=STATIC_DIR, template_folder=TEMPLATE_DIR)
+
 
 import config
 import preparar_dados
@@ -74,7 +80,7 @@ def index():
 def serve_temporal_chart(tipo):
     """Serve temporal analysis chart images"""
     from flask import send_from_directory
-    return send_from_directory('site', f'grafico_temporal_{tipo}.png')
+    return send_from_directory(STATIC_DIR, f'grafico_temporal_{tipo}.png')
 
 # --- FUNÇÕES AUXILIARES ---
 
@@ -487,7 +493,6 @@ def processar_otimizacao_temporal():
             'periodo': f"{config.DATA_INICIO_TESTE} a {config.DATA_FIM_TESTE}",
             'retorno_realizado_aa': safe_num(performance_teste['retorno_aa'] * 100),
             'risco_realizado_aa': safe_num(performance_teste['risco_aa'] * 100),
-            'sharpe_realizado': safe_num(performance_teste['sharpe']),
             'valor_final': safe_num(performance_teste['valor_final']),
             'retorno_total': safe_num(performance_teste['retorno_total'] * 100)
         }
@@ -553,7 +558,6 @@ def processar_otimizacao_temporal():
                 'periodo': f"{config.DATA_INICIO_TESTE} a {config.DATA_FIM_TESTE}",
                 'retorno_realizado_aa': safe_num(performance_otima_teste['retorno_aa'] * 100),
                 'risco_realizado_aa': safe_num(performance_otima_teste['risco_aa'] * 100),
-                'sharpe_realizado': safe_num(performance_otima_teste['sharpe']),
                 'valor_final': safe_num(performance_otima_teste['valor_final']),
                 'retorno_total': safe_num(performance_otima_teste['retorno_total'] * 100)
             }
@@ -605,7 +609,7 @@ def processar_otimizacao_temporal():
         print("\n>> Gerando gráficos de alocação...")
         
         # Gráfico da carteira de treino
-        path_grafico_treino = 'Trabalho_OTM/site/grafico_temporal_treino.png'
+        path_grafico_treino = os.path.join(STATIC_DIR, 'grafico_temporal_treino.png')
         pesos_treino_series = pd.Series(pesos_treino, index=nomes_ativos_treino)
         plot.plot_pizza_por_ativos(
             serie_pesos=pesos_treino_series,
@@ -617,7 +621,7 @@ def processar_otimizacao_temporal():
         )
         
         # Gráfico da carteira ótima
-        path_grafico_otima = 'Trabalho_OTM/site/grafico_temporal_otima.png'
+        path_grafico_otima = os.path.join(STATIC_DIR, 'grafico_temporal_otima.png')
         pesos_completo_series = pd.Series(pesos_completo, index=nomes_ativos_completo)
         plot.plot_pizza_por_ativos(
             serie_pesos=pesos_completo_series,
@@ -654,5 +658,108 @@ def processar_otimizacao_temporal():
         return jsonify({'sucesso': False, 'erro': str(e)}), 500
 
 
+@app.route('/calcular-fronteira', methods=['POST'])
+def calcular_fronteira():
+    try:
+        dados = request.json
+        # Parâmetros básicos
+        valor_investir = float(dados.get('valor') or 0)
+        risco_teto = float(dados.get('risco') or 15) / 100.0
+        teto_ativo_input = float(dados.get('teto_ativo') or 30.0) / 100.0
+        teto_setor_input = float(dados.get('teto_setor') or 100.0) / 100.0
+        setores_proibidos = dados.get('proibidos', [])
+        max_ativos_global = int(dados.get('max_ativos') or 15)
+        max_ativos_por_setor = int(dados.get('max_ativos_setor') or 4)
+        
+        # Lambdas para a fronteira (Pontos estratégicos)
+        lambdas_fronteira = [1, 10, 25, 50, 100, 200, 500]
+        
+        print(f"\n--- [POST /calcular-fronteira] Iniciando cálculo paralelo para lambdas: {lambdas_fronteira} ---")
+        
+        inputs = None
+        with CACHE_LOCK:
+            if CACHE_DADOS is not None:
+                inputs = CACHE_DADOS.copy()
+                inputs['valor_total_investido'] = valor_investir
+        
+        if inputs is None:
+            # Tenta recalcular se não tiver cache (não deveria acontecer se fluxo normal for seguido)
+            inputs = preparar_dados.calcular_inputs_otimizacao(valor_investir)
+            
+        if inputs is None:
+            return jsonify({'sucesso': False, 'erro': 'Dados não disponíveis.'}), 500
+
+        # Função auxiliar para calcular um ponto da fronteira
+        def calcular_ponto(lam):
+            try:
+                # 1. GA (Rápido - menos gerações para fronteira)
+                # Nota: Para fronteira, podemos reduzir gerações se necessário, mas manteremos padrão por enquanto para precisão
+                res_ga = otimizar.rodar_otimização(inputs, risco_teto, float(lam), setores_proibidos, 
+                                                   teto_maximo_ativo=teto_ativo_input, 
+                                                   teto_maximo_setor=teto_setor_input,
+                                                   verbose=False)
+                
+                if not res_ga: return None
+
+                # 2. Gurobi Warm
+                res_gu_warm = otm_gurobi_setores.resolver_com_gurobi_setores(
+                    inputs, float(lam), risco_teto, 
+                    warm_start_pesos=res_ga['pesos_finais'], setores_proibidos=setores_proibidos, 
+                    teto_maximo_ativo=teto_ativo_input, teto_maximo_setor=teto_setor_input, 
+                    max_ativos_carteira=max_ativos_global, max_ativos_setor=max_ativos_por_setor,
+                    verbose=False
+                )
+
+                # 3. Gurobi Cold
+                res_gu_cold = otm_gurobi_setores.resolver_com_gurobi_setores(
+                    inputs, float(lam), risco_teto, 
+                    warm_start_pesos=None, setores_proibidos=setores_proibidos, 
+                    teto_maximo_ativo=teto_ativo_input, teto_maximo_setor=teto_setor_input, 
+                    max_ativos_carteira=max_ativos_global, max_ativos_setor=max_ativos_por_setor,
+                    verbose=False
+                )
+
+                return {
+                    'lambda': lam,
+                    'ga': {'risco': res_ga['risco_final'] * 100, 'retorno': res_ga['retorno_final'] * 100} if res_ga else None,
+                    'gu_warm': {'risco': res_gu_warm['risco'] * 100, 'retorno': res_gu_warm['retorno'] * 100} if res_gu_warm else None,
+                    'gu_cold': {'risco': res_gu_cold['risco'] * 100, 'retorno': res_gu_cold['retorno'] * 100} if res_gu_cold else None
+                }
+            except Exception as e:
+                print(f"Erro no lambda {lam}: {e}")
+                return None
+
+        # Execução Paralela
+        resultados = []
+        with  concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+            futures = {executor.submit(calcular_ponto, lam): lam for lam in lambdas_fronteira}
+            for future in concurrent.futures.as_completed(futures):
+                res = future.result()
+                if res: resultados.append(res)
+        
+        # Organiza dados para o frontend
+        resultados.sort(key=lambda x: x['lambda'])
+        
+        fronteira_ga = [{'x': r['ga']['risco'], 'y': r['ga']['retorno'], 'lambda': r['lambda']} for r in resultados if r['ga']]
+        fronteira_gu_warm = [{'x': r['gu_warm']['risco'], 'y': r['gu_warm']['retorno'], 'lambda': r['lambda']} for r in resultados if r['gu_warm']]
+        fronteira_gu_cold = [{'x': r['gu_cold']['risco'], 'y': r['gu_cold']['retorno'], 'lambda': r['lambda']} for r in resultados if r['gu_cold']]
+
+        print("--- [POST /calcular-fronteira] Cálculo finalizado. ---")
+        return jsonify({
+            'sucesso': True,
+            'fronteira': {
+                'ga': fronteira_ga,
+                'gurobi_warm': fronteira_gu_warm,
+                'gurobi_cold': fronteira_gu_cold
+            }
+        })
+
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({'sucesso': False, 'erro': str(e)}), 500
+
+
 if __name__ == '__main__':
+    if os.environ.get("WERKZEUG_RUN_MAIN") == "true":
+        print("✅ Servidor rodando! Acesse: http://127.0.0.1:5000")
     app.run(debug=True, port=5000)
