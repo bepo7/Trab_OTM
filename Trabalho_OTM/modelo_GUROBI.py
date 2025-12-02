@@ -5,7 +5,6 @@ import numpy as np
 import math
 
 import preparar_dados
-import otimizar
 import config
 
 # Função segura para converter valores para float
@@ -161,7 +160,7 @@ def resolver_com_gurobi_setores(inputs, lambda_risk, risco_max_usuario,
     expr_var = gp.quicksum(pesos[i] * cov_matrix[i, j] * pesos[j] for i in range(n_ativos) for j in range(n_ativos))
     # Restrições de Teto Setorial que limitam o peso total por setor
     expr_pvp = gp.quicksum(pesos[i] * vals_pvp[i] for i in range(n_ativos))
-    # Restrição de CVaR que deve ser menor que o máximo do usuário
+    # Métrica CVaR que deve ser minimizada
     expr_cvar = gp.quicksum(pesos[i] * vals_cvar[i] for i in range(n_ativos))
     # Restrição de Soma dos Pesos que deve ser menor que 1.0
     expr_soma_pesos = gp.quicksum(pesos)

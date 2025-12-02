@@ -11,7 +11,7 @@ import logging
 log = logging.getLogger('werkzeug')
 log.setLevel(logging.ERROR)
 
-# --- CONFIGURAÇÃO DE CAMINHOS ---
+# Configuração dos diretórios
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 STATIC_DIR = os.path.join(BASE_DIR, 'plots')
 TEMPLATE_DIR = os.path.join(BASE_DIR, 'site')
@@ -24,17 +24,16 @@ app = Flask(__name__, static_folder=STATIC_DIR, template_folder=TEMPLATE_DIR)
 
 import config
 import preparar_dados
-import otimizar
-import otm_gurobi_setores
+import modelo_AG
+import modelo_GUROBI
 import plot
 
-# ==============================================================================
-# SISTEMA DE CACHE
-# ==============================================================================
+
 CACHE_DADOS = None
 CACHE_LOCK = threading.Lock()
 STATUS_CARREGAMENTO = "Aguardando..."
 
+# Função de pré-carregamento em background
 def tarefa_background_download():
     global CACHE_DADOS, STATUS_CARREGAMENTO
     with CACHE_LOCK:
@@ -66,9 +65,6 @@ def trigger_pre_load():
 def check_status():
     return jsonify({'status': STATUS_CARREGAMENTO})
 
-# ==============================================================================
-# ROTAS PRINCIPAIS
-# ==============================================================================
 
 @app.route('/')
 def index():
@@ -82,8 +78,7 @@ def serve_temporal_chart(tipo):
     from flask import send_from_directory
     return send_from_directory(STATIC_DIR, f'grafico_temporal_{tipo}.png')
 
-# --- FUNÇÕES AUXILIARES ---
-
+# Função segura para converter valores para float
 def safe_num(val):
     if val is None: return None
     try:
@@ -92,7 +87,7 @@ def safe_num(val):
     except: pass
     return val
 
-# --- FORMATAR DADOS (AGORA COM QUANTIDADE DE COTAS) ---
+# Função para formatar os dados de alocação para o front-end
 def formatar_dados_para_frontend(ticker_list, peso_array, valor_investido, precos_map, lotes_exatos=None):
     alocacao = []
     peso_array = np.nan_to_num(peso_array, nan=0.0)
@@ -112,7 +107,7 @@ def formatar_dados_para_frontend(ticker_list, peso_array, valor_investido, preco
             
             alocacao.append({
                 'ativo': ticker,
-                'qtd': qtd, # Campo novo
+                'qtd': qtd,
                 'peso': round(peso * 100, 2),
                 'valor': round(peso * valor_investido, 2)
             })
@@ -128,7 +123,7 @@ def formatar_dados_para_frontend(ticker_list, peso_array, valor_investido, preco
             })
     return sorted(alocacao, key=lambda x: x['peso'], reverse=True)
 
-# --- CÁLCULO DE SETORES (AGORA COM SOMA DE COTAS) ---
+# Função para calcular alocação setorial
 def calcular_alocacao_setorial(nomes_ativos, pesos_array, valor_investido, precos_map, lotes_exatos=None):
     mapa_setores = config.obter_mapa_setores_ativos()
     
@@ -137,11 +132,12 @@ def calcular_alocacao_setorial(nomes_ativos, pesos_array, valor_investido, preco
         for ativo in lista_ativos:
             ativo_para_setor[ativo] = setor
             
-    totais_setor = {} # {Setor: Peso}
-    totais_qtd_setor = {} # {Setor: Qtd}
+    totais_setor = {}
+    totais_qtd_setor = {}
     
     pesos_array = np.nan_to_num(pesos_array, nan=0.0)
     
+    # Cálculo dos totais por setor
     for i, ativo in enumerate(nomes_ativos):
         peso = float(pesos_array[i])
         if peso > 1e-4:
@@ -179,18 +175,22 @@ def calcular_alocacao_setorial(nomes_ativos, pesos_array, valor_investido, preco
         
     return sorted(resultado, key=lambda x: x['peso'], reverse=True)
 
+# Função para contar ativos e setores
 def contar_ativos_setores(pesos_array, alocacao_setorial_lista):
     qtd_ativos = np.sum(np.nan_to_num(pesos_array) > 1e-4)
     qtd_setores = len([s for s in alocacao_setorial_lista if "CAIXA" not in s['setor']])
     return int(qtd_ativos), int(qtd_setores)
 
 @app.route('/otimizar', methods=['POST'])
+
+# Função principal para processar a otimização
 def processar_otimizacao():
     global CACHE_DADOS
     try:
         dados = request.json
         valor_investir = float(dados.get('valor') or 0)
         
+        # Variáveis de controle
         lambda_risco = float(dados.get('lambda') or 50.0)
         risco_teto = float(dados.get('risco') or 15) / 100.0
         teto_ativo_input = float(dados.get('teto_ativo') or 30.0) / 100.0
@@ -220,20 +220,20 @@ def processar_otimizacao():
         # Pega os preços para calcular as quantidades
         precos_map = inputs.get('ultimos_precos', pd.Series()).to_dict()
 
-        # 1. GA
+        # 1 - Algoritmo Genético
         print(">> Rodando GA...")
         start_ga = time.time()
-        res_ga = otimizar.rodar_otimização(inputs, risco_teto, lambda_risco, setores_proibidos, 
+        res_ga = modelo_AG.rodar_otimização(inputs, risco_teto, lambda_risco, setores_proibidos, 
                                            teto_maximo_ativo=teto_ativo_input, 
                                            teto_maximo_setor=teto_setor_input)
         tempo_ga = time.time() - start_ga
         
         if res_ga is None: return jsonify({'sucesso': False, 'erro': 'GA não convergiu.'}), 400
 
-        # 2. Gurobi Warm
+        # 2 - Gurobi Warm
         print(">> Rodando Gurobi (Warm)...")
         start_gu_warm = time.time()
-        res_gurobi_warm = otm_gurobi_setores.resolver_com_gurobi_setores(
+        res_gurobi_warm = modelo_GUROBI.resolver_com_gurobi_setores(
             inputs, lambda_risco, risco_teto, 
             warm_start_pesos=res_ga['pesos_finais'], setores_proibidos=setores_proibidos, 
             teto_maximo_ativo=teto_ativo_input, teto_maximo_setor=teto_setor_input,
@@ -242,10 +242,10 @@ def processar_otimizacao():
         )
         tempo_gu_warm = time.time() - start_gu_warm
 
-        # 3. Gurobi Cold
+        # 3 - Gurobi Cold
         print(">> Rodando Gurobi (Cold)...")
         start_gu_cold = time.time()
-        res_gurobi_cold = otm_gurobi_setores.resolver_com_gurobi_setores(
+        res_gurobi_cold = modelo_GUROBI.resolver_com_gurobi_setores(
             inputs, lambda_risco, risco_teto, 
             warm_start_pesos=None, setores_proibidos=setores_proibidos, 
             teto_maximo_ativo=teto_ativo_input, teto_maximo_setor=teto_setor_input,
@@ -278,6 +278,7 @@ def processar_otimizacao():
         try: bench_sp500 = clean_list((df_bench['S&P500 (BRL)'] * 100).fillna(100).tolist())
         except: bench_sp500 = []
 
+        # Função para preparar backtest
         def preparar_backtest_carteira(pesos, nomes):
             dict_pesos = dict(zip(nomes, pesos))
             pesos_ordenados = [dict_pesos.get(col, 0.0) for col in retornos_hist.columns]
@@ -286,13 +287,12 @@ def processar_otimizacao():
             )
             return datas_cart, clean_list(valores_cart)
 
-        # --- A. DADOS GA ---
+        # Dados do GA
         row_ga = res_ga['dataframe_resultado'].iloc[0]
         pesos_ga = row_ga.drop(['Risco_Alvo', 'Risco_Encontrado_Anual', 'Retorno_Encontrado_Anual'], errors='ignore')
         pesos_ga_final = pesos_ga.reindex(nomes_ativos).fillna(0.0).values
         datas_ga, valores_ga = preparar_backtest_carteira(pesos_ga_final, nomes_ativos)
         
-        # GA: Passamos None nos lotes_exatos, então ele calcula baseado no peso
         aloc_setor_ga = calcular_alocacao_setorial(nomes_ativos, pesos_ga_final, valor_investir, precos_map)
         n_ativos_ga, n_setores_ga = contar_ativos_setores(pesos_ga_final, aloc_setor_ga)
 
@@ -314,12 +314,11 @@ def processar_otimizacao():
             'backtest': {'datas': datas_ga, 'carteira': valores_ga, 'cdi': bench_cdi, 'ibov': bench_ibov, 'sp500': bench_sp500}
         }
 
-        # --- B. DADOS GUROBI WARM ---
+        # Dados do Gurobi Warm
         data_gu_warm = None
         if res_gurobi_warm:
             datas_gu, valores_gu = preparar_backtest_carteira(res_gurobi_warm['pesos'], nomes_ativos)
             
-            # Gurobi: Passamos res_gurobi_warm['lotes'] para ter a qtd exata
             lotes_warm = res_gurobi_warm.get('lotes') 
             
             aloc_setor_warm = calcular_alocacao_setorial(nomes_ativos, res_gurobi_warm['pesos'], valor_investir, precos_map, lotes_warm)
@@ -343,7 +342,7 @@ def processar_otimizacao():
                 'backtest': {'datas': datas_gu, 'carteira': valores_gu, 'cdi': bench_cdi, 'ibov': bench_ibov, 'sp500': bench_sp500}
             }
 
-        # --- C. DADOS GUROBI COLD ---
+        # Dados do Gurobi Cold
         data_gu_cold = None
         if res_gurobi_cold:
             datas_cold, valores_cold = preparar_backtest_carteira(res_gurobi_cold['pesos'], nomes_ativos)
@@ -378,14 +377,15 @@ def processar_otimizacao():
         return jsonify({'sucesso': False, 'erro': str(e)}), 500
 
 @app.route('/otimizar-temporal', methods=['POST'])
+
+# Função principal para processar a otimização temporal
 def processar_otimizacao_temporal():
-    """
-    Análise temporal: treina com 2021-2022, testa em 2023-2024, compara com carteira ótima 2021-2024
-    """
+  
     try:
         dados = request.json
         valor_investir = float(dados.get('valor') or 100000)
         
+        # Variáveis de controle
         lambda_risco = float(dados.get('lambda') or 50.0)
         risco_teto = float(dados.get('risco') or 15) / 100.0
         teto_ativo_input = float(dados.get('teto_ativo') or 30.0) / 100.0
@@ -399,9 +399,6 @@ def processar_otimizacao_temporal():
         print(f"ANÁLISE TEMPORAL DE CARTEIRA")
         print(f"{'='*80}")
         
-        # ========================================================================
-        # DOWNLOAD ÚNICO: Baixa dados de 2021-2024 uma vez só
-        # ========================================================================
         print(f"\n[DOWNLOAD ÚNICO] Baixando dados de {config.DATA_INICIO_COMPLETO} a {config.DATA_FIM_COMPLETO}")
         
         inputs_completo = preparar_dados.calcular_inputs_otimizacao_periodo(
@@ -413,9 +410,7 @@ def processar_otimizacao_temporal():
         if inputs_completo is None:
             return jsonify({'sucesso': False, 'erro': 'Falha ao baixar dados (2021-2024).'}), 500
         
-        # ========================================================================
-        # FASE 1: TREINO COM DADOS 2021-2023 (reutilizando dados já baixados)
-        # ========================================================================
+        # Fase 1: Otimização com dados de treino
         print(f"\n[FASE 1] Otimizando carteira com dados de {config.DATA_INICIO_TREINO} a {config.DATA_FIM_TREINO}")
         
         # Reutiliza os dados completos, filtrando para o período de treino
@@ -436,7 +431,7 @@ def processar_otimizacao_temporal():
         print(f"   Ativos: {len(nomes_ativos_treino)}, Setores proibidos: {setores_proibidos}")
         print(f"   Parâmetros: max_ativos={max_ativos_global}, max_ativos_setor={max_ativos_por_setor}")
         start_treino = time.time()
-        res_gurobi_treino = otm_gurobi_setores.resolver_com_gurobi_setores(
+        res_gurobi_treino = modelo_GUROBI.resolver_com_gurobi_setores(
             inputs_treino, lambda_risco, risco_teto,
             warm_start_pesos=None, setores_proibidos=setores_proibidos,
             teto_maximo_ativo=teto_ativo_input, teto_maximo_setor=teto_setor_input,
@@ -473,9 +468,7 @@ def processar_otimizacao_temporal():
         if n_ativos_treino == 0:
             return jsonify({'sucesso': False, 'erro': 'A otimização de treino resultou em uma carteira vazia (100% caixa). Tente reduzir a aversão ao risco ou aumentar a penalidade de caixa.'}), 400
 
-        # ========================================================================
-        # FASE 2: TESTE DA CARTEIRA DE TREINO EM 2023-2024
-        # ========================================================================
+        # Fase 2: Simulação da performance no período de teste
         print(f"\n[FASE 2] Simulando performance da carteira 2021-2022 no período {config.DATA_INICIO_TESTE} a {config.DATA_FIM_TESTE}")
         
         performance_teste = preparar_dados.simular_performance_periodo(
@@ -497,9 +490,7 @@ def processar_otimizacao_temporal():
             'retorno_total': safe_num(performance_teste['retorno_total'] * 100)
         }
         
-        # ========================================================================
-        # FASE 3: CARTEIRA ÓTIMA COM DADOS COMPLETOS 2021-2024 (dados já baixados)
-        # ========================================================================
+        # Fase 3: Otimização com dados completos
         print(f"\n[FASE 3] Otimizando carteira com dados completos de {config.DATA_INICIO_COMPLETO} a {config.DATA_FIM_COMPLETO}")
         
         # Dados já foram baixados no início, apenas reutiliza
@@ -509,7 +500,7 @@ def processar_otimizacao_temporal():
         # Otimiza com Gurobi (usando dados completos)
         print("\n>> Otimizando com Gurobi (dados 2021-2024)...")
         start_completo = time.time()
-        res_gurobi_completo = otm_gurobi_setores.resolver_com_gurobi_setores(
+        res_gurobi_completo = modelo_GUROBI.resolver_com_gurobi_setores(
             inputs_completo, lambda_risco, risco_teto,
             warm_start_pesos=None, setores_proibidos=setores_proibidos,
             teto_maximo_ativo=teto_ativo_input, teto_maximo_setor=teto_setor_input,
@@ -543,7 +534,7 @@ def processar_otimizacao_temporal():
         
         alocacao_completo = formatar_dados_para_frontend(nomes_ativos_completo, pesos_completo, valor_investir, precos_map_completo, lotes_completo)
         
-        # Simula performance da carteira ótima em 2023-2024 (para comparação justa)
+        # Simula performance da carteira ótima em 2023-2024
         print(f"\n>> Simulando performance da carteira ótima em 2023-2024...")
         performance_otima_teste = preparar_dados.simular_performance_periodo(
             pesos_completo,
@@ -565,9 +556,7 @@ def processar_otimizacao_temporal():
             metricas_otima_teste = None
         
 
-        # ========================================================================
-        # FASE 4: COMPARAÇÃO
-        # ========================================================================
+        # Fase 4: Comparação dos resultados
         print(f"\n[FASE 4] Comparando resultados...")
         
         # Diferenças entre carteira de treino vs carteira ótima
@@ -603,9 +592,7 @@ def processar_otimizacao_temporal():
         print(f"Carteira Ótima (2021-2024): Retorno={metricas_completo['retorno_aa']:.2f}% | Risco={metricas_completo['risco_aa']:.2f}%")
         print(f"{'='*80}\n")
         
-        # ========================================================================
-        # GERAR GRÁFICOS DE ALOCAÇÃO
-        # ========================================================================
+        # Fase 5: Geração dos gráficos
         print("\n>> Gerando gráficos de alocação...")
         
         # Gráfico da carteira de treino
@@ -659,6 +646,8 @@ def processar_otimizacao_temporal():
 
 
 @app.route('/calcular-fronteira', methods=['POST'])
+
+# Função para calcular a fronteira eficiente
 def calcular_fronteira():
     try:
         dados = request.json
@@ -671,7 +660,7 @@ def calcular_fronteira():
         max_ativos_global = int(dados.get('max_ativos') or 15)
         max_ativos_por_setor = int(dados.get('max_ativos_setor') or 4)
         
-        # Lambdas para a fronteira (Pontos estratégicos)
+        # Lambdas para a fronteira
         lambdas_fronteira = [1, 10, 25, 50, 100, 200, 500]
         
         print(f"\n--- [POST /calcular-fronteira] Iniciando cálculo paralelo para lambdas: {lambdas_fronteira} ---")
@@ -683,7 +672,7 @@ def calcular_fronteira():
                 inputs['valor_total_investido'] = valor_investir
         
         if inputs is None:
-            # Tenta recalcular se não tiver cache (não deveria acontecer se fluxo normal for seguido)
+            # Tenta recalcular se não tiver cache
             inputs = preparar_dados.calcular_inputs_otimizacao(valor_investir)
             
         if inputs is None:
@@ -692,9 +681,8 @@ def calcular_fronteira():
         # Função auxiliar para calcular um ponto da fronteira
         def calcular_ponto(lam):
             try:
-                # 1. GA (Rápido - menos gerações para fronteira)
-                # Nota: Para fronteira, podemos reduzir gerações se necessário, mas manteremos padrão por enquanto para precisão
-                res_ga = otimizar.rodar_otimização(inputs, risco_teto, float(lam), setores_proibidos, 
+                # 1. Algoritmo Genético
+                res_ga = modelo_AG.rodar_otimização(inputs, risco_teto, float(lam), setores_proibidos, 
                                                    teto_maximo_ativo=teto_ativo_input, 
                                                    teto_maximo_setor=teto_setor_input,
                                                    verbose=False)
@@ -702,7 +690,7 @@ def calcular_fronteira():
                 if not res_ga: return None
 
                 # 2. Gurobi Warm
-                res_gu_warm = otm_gurobi_setores.resolver_com_gurobi_setores(
+                res_gu_warm = modelo_GUROBI.resolver_com_gurobi_setores(
                     inputs, float(lam), risco_teto, 
                     warm_start_pesos=res_ga['pesos_finais'], setores_proibidos=setores_proibidos, 
                     teto_maximo_ativo=teto_ativo_input, teto_maximo_setor=teto_setor_input, 
@@ -711,7 +699,7 @@ def calcular_fronteira():
                 )
 
                 # 3. Gurobi Cold
-                res_gu_cold = otm_gurobi_setores.resolver_com_gurobi_setores(
+                res_gu_cold = modelo_GUROBI.resolver_com_gurobi_setores(
                     inputs, float(lam), risco_teto, 
                     warm_start_pesos=None, setores_proibidos=setores_proibidos, 
                     teto_maximo_ativo=teto_ativo_input, teto_maximo_setor=teto_setor_input, 

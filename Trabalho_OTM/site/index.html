@@ -18,9 +18,7 @@
             --accent-color: #2e7d32;
             --text-dark: #1c3329;
             --gurobi-warm-color: #0056b3;
-            /* Azul */
             --gurobi-cold-color: #6a1b9a;
-            /* Roxo */
         }
 
         body {
@@ -72,7 +70,6 @@
             }
         }
 
-        /* Formulário */
         .form-group {
             margin-bottom: 20px;
         }
@@ -84,7 +81,6 @@
             color: var(--subtitle-color);
         }
 
-        /* GRID PARA INPUTS (Para caber os novos campos) */
         .form-grid-inputs {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -142,7 +138,6 @@
             border-bottom: 1px solid #f0f0f0;
         }
 
-        /* --- ABAS (TABS) --- */
         .tabs-container {
             display: flex;
             justify-content: center;
@@ -193,7 +188,6 @@
             display: block;
         }
 
-        /* --- RESULTADOS --- */
         .metrics-summary {
             display: flex;
             justify-content: space-between;
@@ -247,7 +241,6 @@
             padding-bottom: 60px;
         }
 
-        /* CABEÇALHOS DAS TABELAS COM CONTADOR */
         .card-header-flex {
             display: flex;
             justify-content: space-between;
@@ -272,7 +265,6 @@
             font-weight: bold;
         }
 
-        /* Cores Badge */
         .count-badge.ga-theme {
             background-color: rgba(31, 93, 34, 0.1);
             color: var(--primary-color);
@@ -302,7 +294,6 @@
 
         .table-card {
             height: 450px;
-            /* Mesma altura para ambas as tabelas */
             display: flex;
             flex-direction: column;
         }
@@ -312,16 +303,13 @@
             overflow-y: auto;
         }
 
-        /* AJUSTE DAS TABELAS PARA FICAREM IGUAIS */
         table {
             width: 100%;
             border-collapse: separate;
             border-spacing: 0;
             table-layout: fixed;
-            /* Força larguras fixas */
         }
 
-        /* DEFINIÇÃO DE LARGURA DE COLUNAS */
         .gurobi-table th:nth-child(1),
         .gurobi-table td:nth-child(1) {
             width: 30%;
@@ -330,22 +318,18 @@
         .gurobi-table th:nth-child(2),
         .gurobi-table td:nth-child(2) {
             width: 20%;
-            /* Cotas */
         }
 
         .gurobi-table th:nth-child(3),
         .gurobi-table td:nth-child(3) {
             width: 25%;
-            /* Peso */
         }
 
         .gurobi-table th:nth-child(4),
         .gurobi-table td:nth-child(4) {
             width: 25%;
-            /* Valor */
         }
 
-        /* LARGURAS ESPECÍFICAS PARA GA (3 COLUNAS: Nome, Peso, Valor) */
         .ga-table th:nth-child(1),
         .ga-table td:nth-child(1) {
             width: 40%;
@@ -374,19 +358,16 @@
             padding: 12px;
             font-size: 0.95rem;
             z-index: 10;
-            /* Mantém o título alinhado à esquerda */
             text-align: left;
         }
 
         td {
-            /* Remove o 'text-align: left' padrão aqui para que a regra de alinhamento à direita funcione */
             padding: 12px;
             border-bottom: 1px solid #ddd;
             font-size: 0.95rem;
             color: #333;
         }
 
-        /* 2. Força Alinhamento à Direita nos Cabeçalhos */
         .gurobi-table th:nth-child(2),
         .gurobi-table th:nth-child(3),
         .gurobi-table th:nth-child(4),
@@ -395,7 +376,6 @@
             text-align: right !important;
         }
 
-        /* 3. Força Alinhamento à Direita no Corpo da Tabela */
         .gurobi-table td:nth-child(2),
         .gurobi-table td:nth-child(3),
         .gurobi-table td:nth-child(4),
@@ -838,7 +818,7 @@
                     Comparação</button>
             </div>
 
-            <!-- ABA: CARTEIRA TREINO (2021-2022) -->
+
             <div id="content-treino" class="tab-content active">
                 <h3 style="color: #d35400; text-align: center;">Carteira Treinada com Dados de 2021-2023</h3>
 
@@ -865,7 +845,6 @@
                     </div>
                 </div>
 
-                <!-- Performance Real em 2023-2024 -->
                 <div class="result-base-card"
                     style="background: #fff3e0; border: 2px solid #ff9800; margin-bottom: 20px;">
                     <h4 style="color: #e65100; margin-top: 0;">🎯 Performance Real (2024)</h4>
@@ -886,7 +865,6 @@
                     </div>
                 </div>
 
-                <!-- Gráfico de Alocação -->
                 <h3 style="margin-bottom: 10px;"><span style="color: #d35400;">📊</span> Alocação da Carteira</h3>
                 <div class="result-base-card chart-card" style="margin-bottom: 20px; border-left: 4px solid #d35400;">
                     <div class="plot-placeholder" id="plot_TREINO"></div>
@@ -939,7 +917,6 @@
                 </div>
             </div>
 
-            <!-- ABA: CARTEIRA ÓTIMA (2021-2024) -->
             <div id="content-otima" class="tab-content">
                 <h3 style="color: #2e7d32; text-align: center;">Carteira Ótima com Dados Completos (2021-2024)</h3>
 
@@ -966,7 +943,6 @@
                     </div>
                 </div>
 
-                <!-- Performance Real em 2023-2024 -->
                 <div class="result-base-card"
                     style="background: #e8f5e9; border: 2px solid #4caf50; margin-bottom: 20px;">
                     <h4 style="color: #2e7d32; margin-top: 0;">🎯 Performance Real (2024)</h4>
@@ -989,7 +965,6 @@
                     </div>
                 </div>
 
-                <!-- Gráfico de Alocação -->
                 <h3 style="margin-bottom: 10px;"><span style="color: #2e7d32;">📊</span> Alocação da Carteira</h3>
                 <div class="result-base-card chart-card" style="margin-bottom: 20px; border-left: 4px solid #2e7d32;">
                     <div class="plot-placeholder" id="plot_OTIMA"></div>
@@ -1038,7 +1013,6 @@
                 </div>
             </div>
 
-            <!-- ABA: COMPARAÇÃO -->
             <div id="content-comparacao" class="tab-content">
                 <h3 style="text-align: center;">🔍 Comparação de Resultados</h3>
 

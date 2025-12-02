@@ -104,12 +104,6 @@ def rodar_visualizacao_completa(inputs, res_ga, res_gurobi_warm, res_gurobi_cold
             nome_arquivo=path_ga,
             titulo_personalizado="Algoritmo Genético"
         )
-        
-        # Se possível, plota a evolução do GA
-        if 'retornos_diarios_historicos' in inputs and 'df_benchmarks' in inputs:
-            # Transforma pesos_ga (Series) em array numpy para cálculo
-            pesos_array = pesos_ga.reindex(nomes_ativos).fillna(0).values
-    
 
     # Gera os gráficos de pizza para o Gurobi Warm Start
     if res_gurobi_warm:

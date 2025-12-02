@@ -1,18 +1,13 @@
-"""
-================================================
-ARQUIVO DE CONFIGURAÇÃO DO PROJETO DE OTIMIZAÇÃO
-================================================
-"""
 
-# --- 1. PARÂMETROS DE INVESTIMENTO ---
+# Quantidade de anos de dados históricos a serem considerados
 ANOS_DE_DADOS = 5
 
-# --- 2. PARÂMETROS DE OTIMIZAÇÃO ---
-PESO_PVP = 0.005  # Ex: 0.5 penaliza ativos caros
+# Pesos para a função objetivo do Gurobi e do AG
+PESO_PVP = 0.005  
 PESO_CVAR = 0.1
-PESO_PENALIZACAO_CAIXA = 5.0 # Penaliza fortemente deixar dinheiro parado
+PESO_PENALIZACAO_CAIXA = 5.0 
 
-# --- 2.1 ANÁLISE TEMPORAL ---
+# Anos para treino e teste
 DATA_INICIO_TREINO = "2021-01-01"
 DATA_FIM_TREINO = "2023-12-31"
 DATA_INICIO_TESTE = "2024-01-01"
@@ -21,7 +16,7 @@ DATA_INICIO_COMPLETO = "2021-01-01"
 DATA_FIM_COMPLETO = "2024-12-31"
 
 
-# --- 3. UNIVERSO TOTAL DE ATIVOS (NOMES HUMANIZADOS) ---
+# Universo de Ativos por Setor
 UNIVERSO_ATIVOS = {
     
     "Energia e Petróleo": [
@@ -122,7 +117,7 @@ UNIVERSO_ATIVOS = {
     ]
 }
 
-# --- 4. LISTA DE EXCLUSÃO ---
+# Ativos com falhas conhecidas na API do Yahoo Finance
 TICKERS_COM_FALHA_YF = [
     'GOLL4.SA', 'AMBP3.SA', 'OIBR3.SA', 'RCSL3.SA', 'SLED4.SA', 'PDGR3.SA',
     'JBSS3.SA', 'CRFB3.SA', 'NTCO3.SA', 'MALL11.SA', 'BCFF11.SA', 'EURP11.SA',
@@ -132,20 +127,17 @@ TICKERS_COM_FALHA_YF = [
     'MRFG3.SA', 'CVBI11.SA', 'USIM5.SA'
 ]
 
+# Função para obter o universo completo de ativos
 def obter_universo_completo():
     lista_completa = []
     for categoria in UNIVERSO_ATIVOS:
         lista_completa.extend(UNIVERSO_ATIVOS[categoria])
     lista_unica = sorted(list(set(lista_completa)))
     lista_limpa = [t for t in lista_unica if t not in TICKERS_COM_FALHA_YF]
-    # print(f"--- Config: Universo expandido de {len(lista_limpa)} ativos carregado ---")
     return lista_limpa
 
-# --- NOVA FUNÇÃO AUXILIAR PARA MAPEAMENTO ---
+# Função para obter o mapa de setores e seus ativos
 def obter_mapa_setores_ativos():
-    """
-    Retorna um dicionário {Nome_Setor: [Lista_Ativos_Limpa]}
-    """
     mapa = {}
     for setor, ativos in UNIVERSO_ATIVOS.items():
         # Filtra os ativos que estão na lista de falha
