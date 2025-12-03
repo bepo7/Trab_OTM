@@ -434,7 +434,7 @@
 
         <div id="step1" class="step active">
             <h1>Otimizador de Portfólio</h1>
-            <p style="text-align: center; color: #666;">Comparativo: GA vs. Gurobi</p>
+            <p style="text-align: center; color: #666;"></p>
 
             <div class="form-group">
                 <label>Valor Total (R$)</label>
@@ -490,7 +490,7 @@
                 <div class="sector-item"><label><input type="checkbox" value="{{ setor }}"> {{ setor }}</label></div>
                 {% endfor %}
             </div>
-            <button class="btn" onclick="startOptimization()">Calcular Otimização 🚀</button>
+            <button class="btn" onclick="startOptimization()">Calcular Otimização</button>
             <button class="btn" onclick="startTemporalAnalysis()"
                 style="background-color: #d35400; margin-top: 10px;">📊 Análise Temporal (2021-2024)</button>
             <button class="btn btn-outline" onclick="goToStep1()">Voltar</button>
@@ -833,11 +833,11 @@
                     </div>
                     <div class="metric">
                         <div class="metric-value" id="ris_TREINO">0%</div>
-                        <div class="metric-label">Risco</div>
+                        <div class="metric-label">Volatilidade</div>
                     </div>
                     <div class="metric">
                         <div class="metric-value" id="score_TREINO">0.0000</div>
-                        <div class="metric-label">Objetivo</div>
+                        <div class="metric-label">Função Objetivo</div>
                     </div>
                     <div class="metric">
                         <div class="metric-value" id="qtd_ativos_TREINO">0</div>
@@ -931,11 +931,11 @@
                     </div>
                     <div class="metric">
                         <div class="metric-value" id="ris_OTIMA">0%</div>
-                        <div class="metric-label">Risco</div>
+                        <div class="metric-label">Volatilidade</div>
                     </div>
                     <div class="metric">
                         <div class="metric-value" id="score_OTIMA">0.0000</div>
-                        <div class="metric-label">Objetivo</div>
+                        <div class="metric-label">Função Objetivo</div>
                     </div>
                     <div class="metric">
                         <div class="metric-value" id="qtd_ativos_OTIMA">0</div>
@@ -1033,7 +1033,7 @@
                                 <strong id="comp_ret_real">0%</strong>
                             </div>
                             <div style="display: flex; justify-content: space-between; margin: 8px 0;">
-                                <span>Risco:</span>
+                                <span>Volatilidade:</span>
                                 <strong id="comp_ris_treino">0%</strong>
                             </div>
                         </div>
@@ -1050,7 +1050,7 @@
                                 <strong id="comp_ret_real_otima">0%</strong>
                             </div>
                             <div style="display: flex; justify-content: space-between; margin: 8px 0;">
-                                <span>Risco:</span>
+                                <span>Volatilidade:</span>
                                 <strong id="comp_ris_otima">0%</strong>
                             </div>
                         </div>
@@ -1066,12 +1066,12 @@
                             </div>
                             <div>
                                 <div style="font-size: 20px; font-weight: bold; color: #1976d2;" id="dif_risco">0%</div>
-                                <div style="font-size: 12px;">Δ Risco</div>
+                                <div style="font-size: 12px;">Δ Volatilidade</div>
                             </div>
                             <div>
                                 <div style="font-size: 20px; font-weight: bold; color: #1976d2;" id="dif_score">0.0000
                                 </div>
-                                <div style="font-size: 12px;">Δ Objetivo</div>
+                                <div style="font-size: 12px;">Δ Função Objetivo</div>
                             </div>
                         </div>
                     </div>
